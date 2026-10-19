@@ -6,11 +6,36 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/anhoder/foxful-cli/model"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/go-musicfox/go-musicfox/internal/configs"
 	desktop "github.com/go-musicfox/go-musicfox/internal/desktop_lyrics"
 	"github.com/go-musicfox/go-musicfox/internal/keybindings"
 )
+
+func TestDesktopLyricsContextNavigationPreservesPage(t *testing.T) {
+	a, n := newFormPageTestApp(t)
+	c := &terminalLyricsController{cfg: configs.DesktopLyricsConfig{Enable: true, FontSize: 36}}
+	n.desktopLyrics = c
+	previous := a.CurPage()
+	request := model.OpenPageMsg{Build: n.openDesktopLyricsSettings}
+	a.Update(request)
+	p, ok := a.CurPage().(*desktopSettingsPage)
+	if !ok || p.back != previous {
+		t.Fatal("context entry lost the previous page")
+	}
+	p.selected, p.editing = 1, true
+	p.input.SetValue("尚未保存的字体")
+	a.Update(request)
+	if a.CurPage() != p || !p.editing || p.input.Value() != "尚未保存的字体" {
+		t.Fatal("repeated right click reset an edit")
+	}
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if a.CurPage() != previous {
+		t.Fatal("closing settings did not restore previous page")
+	}
+}
 
 type terminalLyricsController struct {
 	desktop.Controller

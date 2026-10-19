@@ -172,6 +172,12 @@ func (n *Netease) ToSearchPage(searchType SearchType) (model.Page, tea.Cmd) {
 }
 
 func (n *Netease) InitHook(_ *model.App) {
+	if opener, ok := n.desktopLyrics.(desktop_lyrics.SettingsOpener); ok {
+		opener.SetSettingsHandler(func() {
+			focusLyricsTerminal()
+			n.App.OpenPage(n.openDesktopLyricsSettings)
+		})
+	}
 	config := configs.AppConfig
 	if !style.AccessibleMode() {
 		if ss := configs.CurrentThemeRegistry().CurrentStyleSet(style.HasDarkBackground()); ss != nil {

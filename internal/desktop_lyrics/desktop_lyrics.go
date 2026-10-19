@@ -50,6 +50,11 @@ type SettingsController interface {
 	ResetPosition() error
 }
 
+// SettingsOpener connects a native context click to the terminal settings page.
+type SettingsOpener interface {
+	SetSettingsHandler(func())
+}
+
 // NewController creates a platform-specific desktop lyrics controller.
 // Returns nil on unsupported platforms or when disabled.
 func NewController(cfg configs.DesktopLyricsConfig) Controller {

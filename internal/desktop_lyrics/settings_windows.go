@@ -105,6 +105,12 @@ func (c *windowsController) Settings() configs.DesktopLyricsConfig {
 	return c.cfg
 }
 
+func (c *windowsController) SetSettingsHandler(handler func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onSettings = handler
+}
+
 type lyricSettingsRequest struct {
 	config configs.DesktopLyricsConfig
 	reset  bool

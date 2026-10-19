@@ -7,11 +7,46 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 
 	pixelfont "github.com/go-musicfox/go-musicfox/assets/fonts/fusion-pixel"
 	"github.com/go-musicfox/go-musicfox/internal/configs"
 )
+
+func TestWindowsLyricsNativeRightClickOpensTerminal(t *testing.T) {
+	if os.Getenv("MUSICFOX_NATIVE_LYRICS_TEST") != "1" {
+		t.Skip("requires an interactive Windows desktop")
+	}
+	for _, draggable := range []bool{true, false} {
+		c := NewController(configs.DesktopLyricsConfig{Enable: true, FontSize: 36, Draggable: draggable}).(*windowsController)
+		opened := make(chan struct{}, 2)
+		c.SetSettingsHandler(func() { opened <- struct{}{} })
+		c.Update(LyricLine{Text: "右键歌词打开设置"}, LyricLine{}, 0, 0, true)
+		c.Show()
+		nativeLyricMessage(t, c.hwnd, dlRefresh, 0, 0)
+		// Let DefWindowProc synthesize WM_CONTEXTMENU for locked client clicks.
+		message, hit := uintptr(0x0205), uintptr(0)
+		if draggable {
+			message, hit = 0x00a5, 2
+		}
+		nativeLyricMessage(t, c.hwnd, message-1, hit, 0)
+		nativeLyricMessage(t, c.hwnd, message, hit, 0)
+		select {
+		case <-opened:
+		case <-time.After(time.Second):
+			c.Close()
+			t.Fatalf("right click ignored, draggable=%v", draggable)
+		}
+		select {
+		case <-opened:
+			t.Fatal("duplicate right-click delivery")
+		default:
+		}
+		c.SetSettingsHandler(nil)
+		c.Close()
+	}
+}
 
 func TestLyricSettingsNormalizeFontAndPreserveUnrelatedKeys(t *testing.T) {
 	pixel := normalizeLyricSettings(configs.DesktopLyricsConfig{FontSize: 31})

@@ -78,6 +78,7 @@ type windowsController struct {
 	current, next   string
 	done            chan struct{}
 	configPath      string
+	onSettings      func()
 	// UI-thread-owned resources and layout.
 	font, fontResource                uintptr
 	width, height, fontSize, maxWidth int32
@@ -237,7 +238,13 @@ func desktopLyricsWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) 
 			return 2 // HTCAPTION: drag from the padded lyric rectangle.
 		}
 		return 1 // HTCLIENT
-	case 0x00a5, 0x007b: // Settings are managed in the terminal.
+	case 0x00a5, 0x007b: // Caption/client context clicks share the terminal entry.
+		c.mu.Lock()
+		handler := c.onSettings
+		c.mu.Unlock()
+		if handler != nil {
+			handler()
+		}
 		return 0
 	case dlSettings:
 		request := <-c.settings

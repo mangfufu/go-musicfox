@@ -17,6 +17,22 @@ import (
 
 const desktopSettingsPageType model.PageType = "desktopLyricsSettings"
 
+func (n *Netease) openDesktopLyricsSettings(back model.Page) (model.Page, tea.Cmd) {
+	if _, ok := back.(*desktopSettingsPage); ok {
+		return back, nil
+	}
+	if back == nil {
+		back = n.MustMain()
+	}
+	if cassette, ok := back.(*cassettePage); ok {
+		cassette.pending = false
+	}
+	if n.coverRenderer != nil {
+		n.coverRenderer.ClearDisplayed()
+	}
+	return newDesktopSettingsPage(n, back, NewEventHandler(n)), nil
+}
+
 var desktopSettingLabels = []string{"字号", "字体", "粗体", "斜体", "文字颜色", "描边颜色", "不透明度", "显示方向", "锁定位置", "只显示当前句", "移回屏幕底部中央"}
 
 type desktopSettingsResult struct {
