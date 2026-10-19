@@ -6,11 +6,15 @@ import (
 
 var (
 	// AppVersion Inject by -ldflags
-	AppVersion   = "v5.0.0"
+	AppVersion   = UpstreamBaseVersion + "+cassette"
 	BuildTags    = ""
 	LastfmKey    = ""
 	LastfmSecret = ""
 )
+
+// UpstreamBaseVersion is the latest release included in this fork's source base.
+// Keep upstream release checks separate from the custom build's display version.
+const UpstreamBaseVersion = "v5.1.0"
 
 const AppName = "musicfox"
 const GroupID = "com.anhoder.musicfox"

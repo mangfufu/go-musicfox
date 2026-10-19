@@ -12,10 +12,10 @@ import (
 
 func newVersionNotifyContent(newVersion string) notify.NotifyContent {
 	return notify.NotifyContent{
-		Title:       "发现新版本: " + newVersion,
-		Text:        "去看看呗",
+		Title:       "上游发布新版本: " + newVersion,
+		Text:        "定制版请合并源码更新；上游安装包不包含磁带改造。",
 		Url:         types.AppGithubUrl + "/releases/tag/" + newVersion,
-		ActionLabel: "前往 GitHub",
+		ActionLabel: "查看上游发布说明",
 	}
 }
 
@@ -35,7 +35,7 @@ func checkUpdateNotificationMsg(hasUpdate bool, latestVersion string) model.Show
 		spec = model.NotificationSpec{
 			Level:   model.NotificationSuccess,
 			Title:   "检查更新",
-			Message: types.AppVersion + " 已是最新版本",
+			Message: "上游无需更新：" + latestVersion,
 		}
 	default:
 		spec = model.NotificationSpec{

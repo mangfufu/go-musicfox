@@ -1,5 +1,6 @@
 param(
     [switch]$Build,
+    [switch]$Pixel,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$PlayerArgs
 )
@@ -23,6 +24,27 @@ if ($Build -or -not (Test-Path -LiteralPath $binaryPath)) {
         $env:PATH = $savedPath
         $env:CGO_ENABLED = $savedCGO
     }
+}
+
+if ($Pixel) {
+    $terminalCommand = Get-Command wt.exe -ErrorAction SilentlyContinue
+    $terminalPath = if ($terminalCommand) { $terminalCommand.Source } else {
+        Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\wt.exe'
+    }
+    if (-not (Test-Path -LiteralPath $terminalPath)) {
+        throw 'Install Windows Terminal to use -Pixel, or set Fusion Pixel manually in another terminal.'
+    }
+    & (Join-Path $projectRoot 'Setup-PixelFont.ps1')
+    $quotedLauncher = "'" + $PSCommandPath.Replace("'", "''") + "'"
+    $quotedArguments = @(foreach ($argument in $PlayerArgs) { "'" + $argument.Replace("'", "''") + "'" }) -join ' '
+    $launchCommand = "& $quotedLauncher $quotedArguments"
+    if ($env:MUSICFOX_ROOT) {
+        $quotedRoot = $env:MUSICFOX_ROOT.Replace("'", "''")
+        $launchCommand = "`$env:MUSICFOX_ROOT = '$quotedRoot'; $launchCommand"
+    }
+    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($launchCommand))
+    & $terminalPath -w new -p '{18dd3594-4c48-49c6-aaf0-17f902644a89}' -- powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCommand
+    exit $LASTEXITCODE
 }
 
 $savedRoot = $env:MUSICFOX_ROOT

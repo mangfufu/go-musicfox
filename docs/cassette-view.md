@@ -50,6 +50,26 @@ switchTheme = ["f9"]
 
 ## 界面与缩放
 
+### 像素字体
+
+Windows Terminal 用户运行：
+
+```powershell
+.\Start-Musicfox.ps1 -Pixel
+# 修改源码后重新构建并打开像素字体窗口：
+.\Start-Musicfox.ps1 -Build -Pixel
+```
+
+脚本为当前用户安装仓库自带的 **Fusion Pixel 12px Mono zh-Hans** 字体，并创建独立的 `Musicfox Pixel` 终端配置；随后在新窗口启动播放器。中文、英文、菜单和歌词统一使用像素字体，缺失的符号由终端回退。字体许可证与来源见 [字体目录](../assets/fonts/fusion-pixel/README.md)。
+
+字体使用 18pt（100% 显示缩放下为 24px，即原始点阵的两倍），禁用抗锯齿与强调文字加粗。其他 DPI 下可在该配置的“外观”中调整字号，使实际像素高度接近 12 的整数倍。建议窗口至少 120 列、40 行。
+
+`Setup-PixelFont.ps1` 也可单独运行，不启动播放器。字体位于 `%LOCALAPPDATA%\Microsoft\Windows\Fonts`，配置片段位于 `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\Musicfox\pixel.json`，不更改其他终端配置。若已打开的 Windows Terminal 尚未识别新字体/配置，关闭该终端应用后重新运行。项目移动目录后重新运行脚本即可更新启动路径。
+
+字体由终端渲染，普通 `Start-Musicfox.ps1` 沿用当前终端字体。macOS/Linux 或其他终端可安装同一 OTF 后手动设置字体家族。目前桌面悬浮歌词仅有上游 macOS 实现，Windows 桌面歌词尚未实现。
+
+### 布局
+
 - 默认暖黑底色、灰白文字和橙色强调；磁带使用半块字符和前后景色绘制，配色跟随当前主题。
 - 左栏显示曲目、固定宽度数码时间和同步歌词；右栏显示磁带和队列。
 - 宽度 80–109 列缩小磁带；小于 80 列或高度小于 22 行隐藏右栏。
@@ -73,6 +93,8 @@ switchTheme = ["f9"]
 
 ## 重建和离线预览
 
+本分支默认显示版本为 `v5.1.0+cassette`，检查更新时使用 `internal/types/constants.go` 中的 `UpstreamBaseVersion` 与上游发布版比较，不使用构建哈希或定制版本标记。当前源码已包含 v5.1.0；维护时合并包含新发布版的上游源码后，需要同步提升该基线。发现更高版本会提示查看上游发布说明；应将上游源码合并到定制分支并重建，直接替换为上游安装包不包含磁带改造。
+
 ```powershell
 .\Start-Musicfox.ps1 -Build
 ```
@@ -88,6 +110,8 @@ switchTheme = ["f9"]
 
 ## 验证记录
 
+- 像素字体安装后可通过 Windows 已安装字体列表找到；验证了中文/英文常用字形、字体文件校验值和配置片段 JSON。检查了字体栅格化样张，尚未对真实 Windows Terminal 窗口作像素级截图验收。
+- 更新检查的离线回归测试通过：旧显示版本、Git 哈希和定制版本均以已合并的上游发布版为基线；相同发布版不提示更新，更高发布版仍提示。重新构建后 `--version` 显示 `v5.1.0+cassette`。
 - 原始提交与修改版均在 Windows、Go 1.26.9、MinGW 下构建成功。
 - `go test -tags purego ./internal/cassette ./internal/ui ./internal/keybindings` 通过；覆盖中英混排、组合字符、窄矮窗口、无时长、超长标题、歌词译文、YRC、队列选择、定时链去重、暂停冻结与自定义键位。
 - 120×40、100×30、80×24 以及更小窗口的行数与显示列宽检查通过；检查过 ANSI 栅格化预览。

@@ -139,7 +139,7 @@ func TestCheckUpdateNotificationMsgCoversAllResults(t *testing.T) {
 		wantActions   int
 	}{
 		{name: "update available", hasUpdate: true, latestVersion: "v9.9.9", wantLevel: model.NotificationInfo, wantText: "v9.9.9", wantActions: 1},
-		{name: "already latest", latestVersion: types.AppVersion, wantLevel: model.NotificationSuccess, wantText: "已是最新版本"},
+		{name: "already latest", latestVersion: types.UpstreamBaseVersion, wantLevel: model.NotificationSuccess, wantText: "上游无需更新"},
 		{name: "check failed", wantLevel: model.NotificationError, wantText: "无法获取最新版本信息"},
 	}
 	for _, tt := range tests {
@@ -160,10 +160,10 @@ func TestCheckUpdateNotificationMsgCoversAllResults(t *testing.T) {
 
 func TestCheckUpdateResultRendersDirectlyInTUI(t *testing.T) {
 	app, _ := newFormPageTestApp(t)
-	msg := checkUpdateNotificationMsg(false, types.AppVersion)
+	msg := checkUpdateNotificationMsg(false, types.UpstreamBaseVersion)
 	_, _ = app.Update(msg)
 
-	if view := app.View().Content; !strings.Contains(view, "已是最新版本") {
+	if view := app.View().Content; !strings.Contains(view, "上游无需更新") {
 		t.Fatalf("TUI view does not contain check-update result: %q", view)
 	}
 }
@@ -214,7 +214,7 @@ func TestDualColumnSelectedMenuItemDoesNotWrap(t *testing.T) {
 func TestUpdateNotificationOpensVersionRelease(t *testing.T) {
 	content := newVersionNotifyContent("v9.9.9")
 	wantURL := types.AppGithubUrl + "/releases/tag/v9.9.9"
-	if content.Url != wantURL || content.ActionLabel != "前往 GitHub" {
+	if content.Url != wantURL || content.ActionLabel != "查看上游发布说明" {
 		t.Fatalf("update notification = %#v, want URL %q with GitHub action", content, wantURL)
 	}
 

@@ -28,7 +28,7 @@ func CheckUpdate() (bool, string) {
 		return false, ""
 	}
 
-	return CompareVersion(tag, types.AppVersion, false), tag
+	return CompareVersion(tag, types.UpstreamBaseVersion, false), tag
 }
 
 func CompareVersion(v1, v2 string, equal bool) bool {

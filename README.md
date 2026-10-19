@@ -549,6 +549,8 @@ musicfox upgrade-config
 本分支默认使用复古磁带主界面：上方浏览音乐库，下方显示磁带、数码计时器、歌词与播放队列。按 **F8** 进入全屏播放页，按 **Esc / F8** 返回，按 **F9** 切换主题。
 新增 **Cassette**（暖黑）、**Midnight Tape**（午夜蓝）、**Paper Tape**（浅色纸感）三套配色，菜单、搜索、登录与播放页保持统一。旧配置可设置 `theme.layout = "cassette"`、`theme.activeTheme = "Cassette"`；设置 `theme.layout = "classic"` 可恢复原布局。
 Windows 可运行 `./Start-Musicfox.ps1`，首次登录与歌单选择仍在原界面完成。
+
+使用 `./Start-Musicfox.ps1 -Pixel` 可安装中文等宽像素字体并在专用 Windows Terminal 窗口启动；重新编译加上 `-Build`。更新检查依据已合并的上游发布版，定制版应合并源码更新。字体、主题和启动细节见 [磁带视图说明](docs/cassette-view.md)。
 完整使用、构建与验证说明见 [磁带视图说明](docs/cassette-view.md)。
 </summary>
 

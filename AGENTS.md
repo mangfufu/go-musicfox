@@ -173,6 +173,8 @@ type Player interface {
 
 `cmd/cassette-preview` 用明确标记的示例数据输出 ANSI 预览；不能将预览视为线上播放验收。Windows 启动脚本 `Start-Musicfox.ps1` 默认使用 `.local/user` 保存本地配置与登录状态，`-Build` 可使用 `.tools` 中的本地工具链重建。详细说明见 `docs/cassette-view.md`。
 
+`Start-Musicfox.ps1 -Pixel` 调用 `Setup-PixelFont.ps1`，为当前 Windows 用户注册 `assets/fonts/fusion-pixel` 中保留 OFL 许可证的字体，并写入独立 Windows Terminal fragment，再打开像素字体窗口。字体、字号和抗锯齿由终端配置控制；不修改其他用户配置。更新检查比较 `types.UpstreamBaseVersion` 与上游 release，默认显示版本带 `+cassette`；合并包含新上游发布版的源码时必须同步提升基线，避免误报和遗漏更新。
+
 ### 原界面事件处理
 
 **文件**：`internal/ui/event_handler.go`
