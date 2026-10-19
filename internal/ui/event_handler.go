@@ -59,8 +59,8 @@ func (h *EventHandler) handle(op keybindings.OperateType) (bool, model.Page, tea
 
 	switch op {
 	case keybindings.OpDesktopLyricsSettings:
-		page, cmd := h.netease.openDesktopLyricsSettings(main)
-		return true, page, cmd
+		h.netease.openDesktopLyricsSettings()
+		return true, nil, nil
 	case keybindings.OpCassetteView:
 		h.netease.coverRenderer.ClearDisplayed()
 		return true, newCassettePage(h.netease, h), nil

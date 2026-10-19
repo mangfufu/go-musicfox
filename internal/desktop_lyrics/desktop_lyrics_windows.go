@@ -25,11 +25,11 @@ import (
 const DesktopLyricsAvailable = true
 
 const (
-	dlSettings  = 0x8002 // WM_APP + 2
-	dlRefresh   = 0x8001 // WM_APP + 1
-	dlClose     = 0x0010
-	dlColorKey  = 0x010101
-	dlTextFlags = 0x0010 | 0x0800 | 0x0001 // DT_WORDBREAK | DT_NOPREFIX | DT_CENTER
+	dlOpenSettings = 0x8003 // WM_APP + 3
+	dlRefresh      = 0x8001 // WM_APP + 1
+	dlClose        = 0x0010
+	dlColorKey     = 0x010101
+	dlTextFlags    = 0x0010 | 0x0800 | 0x0001 // DT_WORDBREAK | DT_NOPREFIX | DT_CENTER
 )
 
 var (
@@ -78,11 +78,10 @@ type windowsController struct {
 	current, next   string
 	done            chan struct{}
 	configPath      string
-	onSettings      func()
 	// UI-thread-owned resources and layout.
 	font, fontResource                uintptr
 	width, height, fontSize, maxWidth int32
-	settings                          chan lyricSettingsRequest
+	panel                             *lyricSettingsPanel
 	surface                           *lyricSurface
 	hasRendered, restoredOrigin       bool
 	work                              dlRect
@@ -92,7 +91,7 @@ func newController(cfg configs.DesktopLyricsConfig) Controller {
 	if !cfg.Enable {
 		return nil
 	}
-	c := &windowsController{cfg: normalizeLyricSettings(cfg), done: make(chan struct{}), settings: make(chan lyricSettingsRequest, 1), configPath: app.ConfigFilePath()}
+	c := &windowsController{cfg: normalizeLyricSettings(cfg), done: make(chan struct{}), configPath: app.ConfigFilePath()}
 	ready := make(chan error, 1)
 	go c.run(ready)
 	if err := <-ready; err != nil {
@@ -125,6 +124,11 @@ func (c *windowsController) run(ready chan<- error) {
 		result, _, _ := dlUser.NewProc("GetMessageW").Call(uintptr(unsafe.Pointer(&message)), 0, 0, 0)
 		if int32(result) <= 0 {
 			break
+		}
+		if c.panel != nil {
+			if handled, _, _ := dlUser.NewProc("IsDialogMessageW").Call(c.panel.hwnd, uintptr(unsafe.Pointer(&message))); handled != 0 {
+				continue
+			}
 		}
 		dlUser.NewProc("TranslateMessage").Call(uintptr(unsafe.Pointer(&message)))
 		dlUser.NewProc("DispatchMessageW").Call(uintptr(unsafe.Pointer(&message)))
@@ -235,32 +239,29 @@ func desktopLyricsWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) 
 		return 3 // MA_NOACTIVATE
 	case 0x0084: // WM_NCHITTEST
 		if c.cfg.Draggable {
-			return 2 // HTCAPTION: drag from the padded lyric rectangle.
-		}
+			return 2
+		} // HTCAPTION
 		return 1 // HTCLIENT
-	case 0x00a5, 0x007b: // Caption/client context clicks share the terminal entry.
-		c.mu.Lock()
-		handler := c.onSettings
-		c.mu.Unlock()
-		if handler != nil {
-			handler()
-		}
+	case dlOpenSettings:
+		c.showSettingsPanel()
 		return 0
-	case dlSettings:
-		request := <-c.settings
-		if request.reset {
-			x := c.work.left + (c.work.right-c.work.left-c.width)/2
-			y := max(c.work.top, c.work.bottom-c.height-48)
-			dlUser.NewProc("SetWindowPos").Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, 0x0015)
-			c.persistPosition(hwnd)
-			request.result <- nil
-		} else {
-			request.result <- c.applySettings(hwnd, normalizeLyricSettings(request.config))
+	case 0x00a5: // WM_NCRBUTTONUP: a borderless HTCAPTION has no system menu.
+		c.showSettingsPanel()
+		return 0
+	case 0x007b: // WM_CONTEXTMENU: client-area right click and keyboard menu key.
+		c.showSettingsPanel()
+		return 0
+	case 0x0111: // WM_COMMAND
+		if err := c.settingsCommand(hwnd, wParam&0xffff); err != nil {
+			c.settingsError(hwnd, err)
 		}
 		return 0
 	case 0x0232: // WM_EXITSIZEMOVE
 		c.persistPosition(hwnd)
 	case dlClose:
+		if c.panel != nil {
+			dlUser.NewProc("DestroyWindow").Call(c.panel.hwnd)
+		}
 		dlUser.NewProc("DestroyWindow").Call(hwnd)
 		return 0
 	case 0x0002: // WM_DESTROY
@@ -382,4 +383,13 @@ func (c *windowsController) Close() {
 	}
 	c.mu.Unlock()
 	<-c.done
+}
+
+// OpenSettings posts to the owning window thread without blocking the terminal.
+func (c *windowsController) OpenSettings() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.closed {
+		dlUser.NewProc("PostMessageW").Call(c.hwnd, dlOpenSettings, 0, 0)
+	}
 }

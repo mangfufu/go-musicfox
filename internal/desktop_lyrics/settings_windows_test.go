@@ -12,39 +12,79 @@ import (
 
 	pixelfont "github.com/go-musicfox/go-musicfox/assets/fonts/fusion-pixel"
 	"github.com/go-musicfox/go-musicfox/internal/configs"
+	"golang.org/x/sys/windows"
 )
 
-func TestWindowsLyricsNativeRightClickOpensTerminal(t *testing.T) {
+func waitNativeSettingsPanel(t *testing.T, hwnd uintptr) uintptr {
+	t.Helper()
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		panel, _, _ := dlUser.NewProc("GetWindow").Call(hwnd, 6) // GW_ENABLEDPOPUP
+		if panel != 0 && panel != hwnd {
+			return panel
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("settings panel did not open")
+	return 0
+}
+
+func TestWindowsLyricsNativeContextPanel(t *testing.T) {
 	if os.Getenv("MUSICFOX_NATIVE_LYRICS_TEST") != "1" {
 		t.Skip("requires an interactive Windows desktop")
 	}
 	for _, draggable := range []bool{true, false} {
-		c := NewController(configs.DesktopLyricsConfig{Enable: true, FontSize: 36, Draggable: draggable}).(*windowsController)
-		opened := make(chan struct{}, 2)
-		c.SetSettingsHandler(func() { opened <- struct{}{} })
-		c.Update(LyricLine{Text: "右键歌词打开设置"}, LyricLine{}, 0, 0, true)
-		c.Show()
-		nativeLyricMessage(t, c.hwnd, dlRefresh, 0, 0)
-		// Let DefWindowProc synthesize WM_CONTEXTMENU for locked client clicks.
-		message, hit := uintptr(0x0205), uintptr(0)
+		name := "locked"
 		if draggable {
-			message, hit = 0x00a5, 2
+			name = "draggable"
 		}
-		nativeLyricMessage(t, c.hwnd, message-1, hit, 0)
-		nativeLyricMessage(t, c.hwnd, message, hit, 0)
-		select {
-		case <-opened:
-		case <-time.After(time.Second):
-			c.Close()
-			t.Fatalf("right click ignored, draggable=%v", draggable)
-		}
-		select {
-		case <-opened:
-			t.Fatal("duplicate right-click delivery")
-		default:
-		}
-		c.SetSettingsHandler(nil)
-		c.Close()
+		t.Run(name, func(t *testing.T) {
+			restore := nativeLyricDPI()
+			defer restore()
+			controller := NewController(configs.DesktopLyricsConfig{Enable: true, FontSize: 36, Draggable: draggable})
+			if controller == nil {
+				t.Fatal("native controller initialization failed")
+			}
+			c := controller.(*windowsController)
+			t.Cleanup(c.Close)
+			hwnd := c.hwnd
+			c.Update(LyricLine{Text: "右键设置"}, LyricLine{}, 0, 0, true)
+			c.Show()
+			var result uintptr
+			dlUser.NewProc("SendMessageTimeoutW").Call(hwnd, dlRefresh, 0, 0, 2, 3000, uintptr(unsafe.Pointer(&result)))
+			dlUser.NewProc("UpdateWindow").Call(hwnd)
+			var bounds dlRect
+			dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&bounds)))
+			// The padded, visually transparent corners must now accept clicks.
+			for _, point := range []dlPoint{{bounds.left + 4, bounds.top + 4}, {bounds.right - 4, bounds.bottom - 4}} {
+				packed := uintptr(uint64(uint32(point.x)) | uint64(uint32(point.y))<<32)
+				if target, _, _ := dlUser.NewProc("WindowFromPoint").Call(packed); target != hwnd {
+					t.Fatalf("padded lyric region is click-through: %#x, want %#x", target, hwnd)
+				}
+			}
+			message, hit, point := uintptr(0x0205), uintptr(0), dlPoint{32, 40}
+			if draggable {
+				message, hit, point = 0x00a5, 2, dlPoint{bounds.left + 32, bounds.top + 40}
+			}
+			position := uintptr(uint32(uint16(point.x)) | uint32(uint16(point.y))<<16)
+			dlUser.NewProc("PostMessageW").Call(hwnd, message-1, hit, position)
+			dlUser.NewProc("PostMessageW").Call(hwnd, message, hit, position)
+			panel := waitNativeSettingsPanel(t, hwnd)
+			dlUser.NewProc("SendMessageTimeoutW").Call(panel, 0x0010, 0, 0, 2, 3000, uintptr(unsafe.Pointer(&result)))
+			if alive, _, _ := dlUser.NewProc("IsWindow").Call(hwnd); alive == 0 {
+				t.Fatal("closing settings destroyed the lyrics")
+			}
+			// The terminal shortcut opens the same native panel without a lyric button.
+			c.OpenSettings()
+			panel = waitNativeSettingsPanel(t, hwnd)
+			dlUser.NewProc("PostMessageW").Call(panel, 0x0100, 0x1b, 0) // Esc via the dialog message loop.
+			for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+				if alive, _, _ := dlUser.NewProc("IsWindow").Call(panel); alive == 0 {
+					return
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			t.Fatal("Esc did not close the settings panel")
+		})
 	}
 }
 
@@ -63,7 +103,9 @@ func TestLyricSettingsNormalizeFontAndPreserveUnrelatedKeys(t *testing.T) {
 	if len(updates) != 1 || updates[0].KeyPath[3] != "draggable" {
 		t.Fatalf("lock changed unrelated settings: %+v", updates)
 	}
-
+	if unsafe.Sizeof(uintptr(0)) == 8 && (unsafe.Sizeof(dlLogFont{}) != 92 || unsafe.Sizeof(dlChooseFontData{}) != 104 || unsafe.Sizeof(dlChooseColorData{}) != 72) {
+		t.Fatal("incorrect common dialog ABI")
+	}
 }
 
 func TestWindowsLyricsNativeSettings(t *testing.T) {
@@ -93,14 +135,6 @@ func TestWindowsLyricsNativeSettings(t *testing.T) {
 		}
 		return result
 	}
-	apply := func(change func(*configs.DesktopLyricsConfig)) {
-		t.Helper()
-		cfg := c.Settings()
-		change(&cfg)
-		if err := c.ApplySettings(cfg); err != nil {
-			t.Fatal(err)
-		}
-	}
 	c.Update(LyricLine{Text: "设置预览"}, LyricLine{Text: "下一句保持同步"}, 0, 0, true)
 	c.Show()
 	send(dlRefresh, 0)
@@ -108,18 +142,17 @@ func TestWindowsLyricsNativeSettings(t *testing.T) {
 	if hit := send(0x0084, 0); hit != 2 {
 		t.Fatalf("unlocked hit test = %d", hit)
 	}
-	apply(func(cfg *configs.DesktopLyricsConfig) { cfg.Draggable = !cfg.Draggable })
+	send(0x0111, dlLock)
 	if hit := send(0x0084, 0); hit != 1 {
 		t.Fatalf("locked hit test = %d, want interactive client", hit)
 	}
 	var before, after dlRect
 	dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&before)))
-	apply(func(cfg *configs.DesktopLyricsConfig) {
-		cfg.FontSize = 48
-		cfg.FontBold, cfg.FontItalic = true, true
-		cfg.WindowAlpha = .75
-		cfg.OneLineMode = true
-	})
+	send(0x0111, dlLarger)
+	send(0x0111, dlBold)
+	send(0x0111, dlItalic)
+	send(0x0111, dlOpacityBase+75)
+	send(0x0111, dlOneLine)
 	dlUser.NewProc("UpdateWindow").Call(hwnd)
 	dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&after)))
 	if before.left != after.left || before.top != after.top {
@@ -169,52 +202,45 @@ func TestWindowsLyricsNativeSettings(t *testing.T) {
 	if restored.FontSize != 48 || !restored.FontBold || !restored.FontItalic || restored.WindowAlpha != .75 || restored.Draggable || !restored.OneLineMode {
 		t.Fatalf("saved settings did not reload: %+v", restored)
 	}
-	apply(func(cfg *configs.DesktopLyricsConfig) { cfg.Draggable = !cfg.Draggable })
-	apply(func(cfg *configs.DesktopLyricsConfig) { cfg.FontName = "Microsoft YaHei" })
+	send(0x0111, dlLock)
+	send(0x0111, dlFontBase+1)
 	c.mu.Lock()
 	cfg = c.cfg
 	c.mu.Unlock()
 	if !cfg.Draggable || cfg.FontName != "Microsoft YaHei" {
 		t.Fatal("unlock/font selection failed")
 	}
-	apply(func(cfg *configs.DesktopLyricsConfig) { cfg.Vertical = true })
-	frame = captureLyricFrame(t, hwnd)
-	if frame.height <= frame.width {
-		t.Fatal("vertical layout was not applied")
-	}
-	if folder := os.Getenv("MUSICFOX_LYRICS_ARTIFACT_DIR"); folder != "" {
-		saveLyricTestPNG(t, frame, filepath.Join(folder, "lyrics-vertical.png"), true)
-	}
-	if err := c.ResetPosition(); err != nil {
-		t.Fatal(err)
-	}
-	// Right-clicking must no longer open a separate settings window.
-	send(0x007b, 0)
-	if panel, _, _ := dlUser.NewProc("GetWindow").Call(hwnd, 6); panel != 0 && panel != hwnd {
-		t.Fatal("native settings window still present")
-	}
-	// A failed save must leave both live state and the font unchanged.
-	original := c.Settings()
-	c.mu.Lock()
-	c.configPath = filepath.Join(t.TempDir(), "missing", "config.toml")
-	c.mu.Unlock()
-	changed := original
-	changed.FontSize = 72
-	if err := c.ApplySettings(changed); err == nil {
-		t.Fatal("missing config did not fail")
-	}
-	if c.Settings() != original {
-		t.Fatal("failed save changed live configuration")
-	}
-	c.Close()
-	if err := c.ApplySettings(original); err == nil {
-		t.Fatal("closed controller accepted changes")
-	}
-
 }
 
-type dlLogFont struct {
-	height, width, escapement, orientation, weight                      int32
-	italic, underline, strikeout, charset, output, clip, quality, pitch byte
-	face                                                                [32]uint16
+func TestNativeFontAndColorDialogCancellation(t *testing.T) {
+	if os.Getenv("MUSICFOX_NATIVE_LYRICS_TEST") != "1" {
+		t.Skip("requires an interactive Windows desktop")
+	}
+	// Exercise the real common dialog ABI and cancellation without user input.
+	cancel := windows.NewCallback(func(hwnd, message, _, _ uintptr) uintptr {
+		if message == 0x0110 {
+			dlUser.NewProc("PostMessageW").Call(hwnd, 0x0111, 2, 0)
+		}
+		return 0
+	})
+	var font dlLogFont
+	font.height, font.weight = -36, 400
+	copy(font.face[:], windows.StringToUTF16("Microsoft YaHei"))
+	fontChoice := dlChooseFontData{font: &font, flags: 0x49, hook: cancel}
+	fontChoice.size = uint32(unsafe.Sizeof(fontChoice))
+	if selected, _, _ := dlDialogs.NewProc("ChooseFontW").Call(uintptr(unsafe.Pointer(&fontChoice))); selected != 0 {
+		t.Fatal("font dialog cancellation selected a font")
+	}
+	if code, _, _ := dlDialogs.NewProc("CommDlgExtendedError").Call(); code != 0 {
+		t.Fatalf("font dialog failed: %#x", code)
+	}
+	var custom [16]uint32
+	colorChoice := dlChooseColorData{custom: &custom, flags: 0x13, hook: cancel}
+	colorChoice.size = uint32(unsafe.Sizeof(colorChoice))
+	if selected, _, _ := dlDialogs.NewProc("ChooseColorW").Call(uintptr(unsafe.Pointer(&colorChoice))); selected != 0 {
+		t.Fatal("color dialog cancellation selected a color")
+	}
+	if code, _, _ := dlDialogs.NewProc("CommDlgExtendedError").Call(); code != 0 {
+		t.Fatalf("color dialog failed: %#x", code)
+	}
 }

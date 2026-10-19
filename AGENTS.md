@@ -183,13 +183,11 @@ Windows 原生桌面歌词由 `internal/desktop_lyrics/desktop_lyrics_windows.go
 
 内置菜单图标、帮助星号、通知图标/关闭按钮、磁带选中箭头与音量减号均使用 Fusion Pixel 字库支持的字符。foxful-cli 默认主题的 Powerline 分隔符置空，避免切换其他主题或 classic 布局后再次缺字；glamour 内置 Markdown 样式的任务勾选和定义箭头也改为普通字符。`hack/check_pixel_glyphs.py` 使用 fonttools 读取实际 OTF cmap，扫描应用和终端渲染依赖的内置字符串；只豁免输入别名和歌词解析中剔除的 BOM，不改写网络歌曲/歌词内容。更新 vendor 后需保留上述兼容修改并重跑检查。
 
-桌面歌词设置由 `internal/ui/desktop_lyrics_settings.go` 与 `desktop_lyrics_settings_view.go` 在终端中实现原面板的分区按钮和预设侧栏。96 列以上左右排列，窄窗口将预设排在下方；鼠标命中按渲染矩形与滚动偏移计算，Tab/方向键移动焦点并滚入视口。字体名称、颜色和字号在底部输入，Enter 保存，Esc 取消；真实字体效果显示在桌面歌词上。F10、终端右键和歌词右键共用入口，重复打开保留编辑状态，关闭后返回原页面并恢复 F8 刷新链。歌词窗口不含设置按钮，也不再创建独立设置窗口。
+桌面歌词设置由 `internal/desktop_lyrics/panel_windows.go` 提供独立像素风 Win32 面板。歌词窗口处理 `WM_NCRBUTTONUP` / `WM_CONTEXTMENU` 直接打开面板，锁定和未锁定都有效；歌词上不绘制设置按钮。终端操作 `desktopLyricsSettings`（默认 F10）及右键菜单通过可选 `SettingsOpener.OpenSettings()` 投递 `WM_APP` 消息打开同一个面板，不切换页面，不暂停 F8 页刷新。面板为单实例，重复打开前置已有窗口；原生 owner-draw 按钮保留键盘导航与控件名称，消息循环通过 `IsDialogMessageW` 支持 Tab、空格和 Esc。关闭面板只释放自身资源，退出播放器时关闭全部窗口；所有 HWND/GDI 操作均在歌词窗口线程。
 
-`SettingsOpener.SetSettingsHandler` 在 InitHook 连接原生 `WM_NCRBUTTONUP` / `WM_CONTEXTMENU` 回调，经 foxful-cli `OpenPageMsg` / `App.OpenPage` 在终端事件循环中切换页面；Windows 通过控制台 HWND 或父进程链尝试前置终端。更新 vendor 须保留此导航扩展。`SettingsController.Settings()` 返回加锁快照，`ApplySettings()` / `ResetPosition()` 经 channel 和 `WM_APP` 在歌词窗口线程操作 HWND/GDI；异步命令结果反馈给终端。`settings_windows.go` 写入成功后才替换配置和字体，保存失败保留原值。
+`settings_windows.go` 负责字号、字体、粗斜体、颜色、不透明度、单句模式、横竖排与位置锁定的即时更新。 `lyricStylePresets` 提供默认、琥珀像素、冰蓝像素、清晰雅黑、书页宋体五套外观，复用同一保存流程，仅修改字体/字号/字形/颜色/透明度，保留位置、锁定、方向和单句模式；预设选中状态由实际配置匹配得出，不存额外预设名称，手动调整后可显示自定义。面板右侧展示搭配按钮及说明，`dlPanelWidth` / `dlPanelHeight` 与原生截图测试共用尺寸。调用 `configs.SetTOMLValues` 成功后才替换字体和配置；写文件失败保留原设置。批量编辑与 `SetTOMLValue` 共用互斥锁，避免主题和歌词设置并发覆盖。`vertical`、`fontBold`、`fontItalic` 仅 Windows 生效。竖排按 grapheme cluster 分行，长句分列，原文/译文/下一句保持各自列与颜色；受屏幕宽高约束，超限以省略号结束。锁定后保持左上角，`DesktopLyricsPosition.WindowsOrigin` 保存比例原点，兼容原有中心比例数据；重启字号/方向变化不会重新按文字中心偏移。
 
-`desktop_lyrics/style_presets.go` 在各平台共享默认、琥珀像素、冰蓝像素、清晰雅黑、书页宋体五套外观；只改字体/字号/字形/颜色/透明度，保留锁定、方向和单句模式。选中状态按实际配置匹配，不存额外预设名称。竖排按 grapheme cluster 分列；锁定后保留左上角，`DesktopLyricsPosition.WindowsOrigin` 存比例原点，兼容原有中心比例数据。
-
-终端测试覆盖按钮坐标、预设、输入校验、错误反馈、窄窗口可达性和页面返回；原生测试覆盖右键回调、跨线程更新、字体/透明度、配置保存失败、关闭与重启位置。`MUSICFOX_LYRICS_ARTIFACT_DIR` 导出终端 ANSI 布局和原生歌词表面；原生捕获须保持相同 DPI 感知。文档中的面板预览由实际 ANSI 输出渲染，非系统截图；字库检查脚本覆盖面板字符串。
+终端测试覆盖 F10/右键入口与页面保留；原生测试覆盖右键与跨线程打开、透明留白命中、真实按钮、窗口生命周期、设置保存与隔离数据库的重启位置。通过 `MUSICFOX_LYRICS_ARTIFACT_DIR` 可导出实际 Win32 面板与歌词表面；捕获线程须使用与窗口相同的 DPI 感知上下文，防止系统缩放裁剪。字库检查脚本覆盖面板字符串。
 
 ### 原界面事件处理
 
