@@ -175,6 +175,8 @@ type Player interface {
 
 `Start-Musicfox.ps1 -Pixel` 调用 `Setup-PixelFont.ps1`，为当前 Windows 用户注册 `assets/fonts/fusion-pixel` 中保留 OFL 许可证的字体，并写入独立 Windows Terminal fragment，再打开像素字体窗口。字体、字号和抗锯齿由终端配置控制；不修改其他用户配置。更新检查比较 `types.UpstreamBaseVersion` 与上游 release，默认显示版本带 `+cassette`；合并包含新上游发布版的源码时必须同步提升基线，避免误报和遗漏更新。
 
+Windows 双击入口 `Start-Musicfox.cmd` 使用脚本所在目录调用 PowerShell 像素启动器，并在启动失败时暂停保留报错；专用终端配置使用 `closeOnExit="graceful"`，播放器非零退出时保留窗口。
+
 ### 原界面事件处理
 
 **文件**：`internal/ui/event_handler.go`

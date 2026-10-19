@@ -51,6 +51,7 @@ $profile = @{
         cursorColor = '#e58a50'
         padding = '12'
         hidden = $false
+        closeOnExit = 'graceful'
     })
 }
 $fragmentDirectory = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\Musicfox'

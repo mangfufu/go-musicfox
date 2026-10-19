@@ -4,6 +4,8 @@
 
 ## Windows 启动
 
+可直接双击项目目录里的 **`Start-Musicfox.cmd`**，自动在 Windows Terminal 的像素字体配置中启动。该入口不依赖当前工作目录；启动命令出错会保留报错窗口。播放器异常退出时，专用终端配置也保留窗口，正常退出则关闭。
+
 在项目目录的 Windows Terminal / PowerShell 中运行：
 
 ```powershell

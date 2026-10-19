@@ -550,6 +550,8 @@ musicfox upgrade-config
 新增 **Cassette**（暖黑）、**Midnight Tape**（午夜蓝）、**Paper Tape**（浅色纸感）三套配色，菜单、搜索、登录与播放页保持统一。旧配置可设置 `theme.layout = "cassette"`、`theme.activeTheme = "Cassette"`；设置 `theme.layout = "classic"` 可恢复原布局。
 Windows 可运行 `./Start-Musicfox.ps1`，首次登录与歌单选择仍在原界面完成。
 
+也可直接双击项目目录中的 `Start-Musicfox.cmd`，用像素字体窗口打开；启动出错会保留提示。
+
 使用 `./Start-Musicfox.ps1 -Pixel` 可安装中文等宽像素字体并在专用 Windows Terminal 窗口启动；重新编译加上 `-Build`。更新检查依据已合并的上游发布版，定制版应合并源码更新。字体、主题和启动细节见 [磁带视图说明](docs/cassette-view.md)。
 完整使用、构建与验证说明见 [磁带视图说明](docs/cassette-view.md)。
 </summary>
