@@ -226,6 +226,8 @@ type DesktopLyricsConfig struct {
 	// Font styles for Windows desktop lyrics.
 	FontBold   bool `koanf:"fontBold"`
 	FontItalic bool `koanf:"fontItalic"`
+	// Vertical columns for Windows desktop lyrics.
+	Vertical bool `koanf:"vertical"`
 	// 文字颜色（十六进制）
 	TextColor string `koanf:"textColor"`
 	// 文字阴影颜色（十六进制）

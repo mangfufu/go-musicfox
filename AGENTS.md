@@ -177,15 +177,17 @@ type Player interface {
 
 Windows 双击入口 `Start-Musicfox.cmd` 使用脚本所在目录调用 PowerShell 像素启动器，并在启动失败时暂停保留报错；专用终端配置使用 `closeOnExit="graceful"`，播放器非零退出时保留窗口。
 
-Windows 原生桌面歌词由 `internal/desktop_lyrics/desktop_lyrics_windows.go` 实现，启用 `main.lyric.desktopLyrics.enable` 后创建独立锁线程的 Win32 layered/tool/no-activate 窗口，GDI 双缓冲绘制透明像素文字。字体通过 `assets/fonts/fusion-pixel/font_windows.go` 内嵌并私有加载；播放线程只更新待显示文本和投递消息，窗口线程负责绘制/拖动/销毁与释放 GDI 资源。支持 LRC/YRC 按行同步、翻译、下一句、暂停隐藏配置与主屏比例位置持久化，不含 macOS 的频谱/逐字渐变/背景效果。歌词加载结束主动更新窗口；无内容时清空并隐藏旧句。
+Windows 原生桌面歌词由 `internal/desktop_lyrics/desktop_lyrics_windows.go` 实现，启用 `main.lyric.desktopLyrics.enable` 后创建独立锁线程的 Win32 layered/tool/no-activate 窗口，`render_windows.go` 使用可复用 32 位 DIB 与 `UpdateLayeredWindow` 绘制逐像素透明文字，背景 alpha=2 保留整块留白的鼠标命中，按内容收紧窗口以免占据过大的点击区域。字体通过 `assets/fonts/fusion-pixel/font_windows.go` 内嵌并私有加载；播放线程只更新待显示文本和投递消息，窗口线程负责绘制/拖动/销毁与释放 GDI 资源。支持 LRC/YRC 按行同步、翻译、下一句、暂停隐藏配置与主屏比例位置持久化，不含 macOS 的频谱/逐字渐变/背景效果。歌词加载结束主动更新窗口；无内容时清空并隐藏旧句。
 
 状态栏去除固定的 Nerd Font 时钟图标；磁带布局通过 `DefaultStatusBar.PlainSeparators` 禁用时间与面包屑的 Powerline 分隔符，避免中文像素字体缺字。
 
 内置菜单图标、帮助星号、通知图标/关闭按钮、磁带选中箭头与音量减号均使用 Fusion Pixel 字库支持的字符。foxful-cli 默认主题的 Powerline 分隔符置空，避免切换其他主题或 classic 布局后再次缺字；glamour 内置 Markdown 样式的任务勾选和定义箭头也改为普通字符。`hack/check_pixel_glyphs.py` 使用 fonttools 读取实际 OTF cmap，扫描应用和终端渲染依赖的内置字符串；只豁免输入别名和歌词解析中剔除的 BOM，不改写网络歌曲/歌词内容。更新 vendor 后需保留上述兼容修改并重跑检查。
 
-Windows 歌词可拖动时的 HTCAPTION 右键必须显式处理 `WM_NCRBUTTONUP`：无边框窗口没有系统菜单，不能依赖 `DefWindowProc` 转发 `WM_CONTEXTMENU`。锁定时仍走客户端右键请求。原生回归测试发送右键按下/抬起消息，通过 `GetGUIThreadInfo` 检查真实菜单循环；不能只用 WM_COMMAND 调用设置项代替入口验收。
+Windows 歌词可拖动时的 HTCAPTION 右键必须显式处理 `WM_NCRBUTTONUP`，锁定时走客户端 `WM_CONTEXTMENU`。两者与歌词右上角的“设置”按钮均打开 `panel_windows.go` 的单实例原生设置面板；原生 owner-draw 按钮保留键盘导航与控件名称，消息循环通过 `IsDialogMessageW` 支持 Tab、空格和 Esc。关闭面板只释放自身资源，退出播放器时关闭全部窗口；所有 HWND/GDI 操作仍在歌词窗口线程。
 
-`internal/desktop_lyrics/settings_windows.go` 在歌词文字上提供原生右键菜单，支持字号、系统字体选择、粗斜体、文字/描边颜色、不透明度、单句显示、位置锁定与复位。设置在窗口线程上创建新字体，调用 `configs.SetTOMLValues` 成功后才更新渲染；失败保留原设置。批量编辑与 `SetTOMLValue` 共用互斥锁，防止主题切换与桌面设置并发覆盖，保留用户无关配置/注释。`fontBold`、`fontItalic` 仅 Windows 生效；像素字体按 12px 对齐，普通字体按整数像素。锁定后命中测试返回 HTCLIENT，保留右键解锁入口；窗口调整高度时保持原位置。播放更新始终保留下一句，由绘制阶段决定是否显示，切换单句模式无需等待下一次歌词变化。
+`settings_windows.go` 负责字号、字体、粗斜体、颜色、不透明度、单句模式、横竖排与位置锁定的即时更新。调用 `configs.SetTOMLValues` 成功后才替换字体和配置；写文件失败保留原设置。批量编辑与 `SetTOMLValue` 共用互斥锁，避免主题和歌词设置并发覆盖。`vertical`、`fontBold`、`fontItalic` 仅 Windows 生效。竖排按 grapheme cluster 分行，长句分列，原文/译文/下一句保持各自列与颜色；受屏幕宽高约束，超限以省略号结束。锁定后保持左上角，`DesktopLyricsPosition.WindowsOrigin` 保存比例原点，兼容原有中心比例数据；重启字号/方向变化不会重新按文字中心偏移。
+
+原生测试除设置命令外，还检查右键入口、留白 `WindowFromPoint` 命中、真实按钮激活、窗口生命周期、设置保存和隔离数据库的重启位置。通过 `MUSICFOX_LYRICS_ARTIFACT_DIR` 可导出实际 Win32 面板与歌词表面；捕获线程须使用与窗口相同的 DPI 感知上下文，防止系统缩放裁剪。字库检查脚本覆盖新增面板字符串。
 
 ### 原界面事件处理
 

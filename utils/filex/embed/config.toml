@@ -180,6 +180,8 @@ fontName = ""
 # Font styles for Windows desktop lyrics
 fontBold = false
 fontItalic = false
+# Vertical columns for Windows desktop lyrics
+vertical = false
 # 文字颜色（十六进制）
 textColor = "#FFFFFF"
 # 文字阴影颜色（十六进制）

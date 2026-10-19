@@ -73,18 +73,14 @@ func TestWindowsLyricsNativeLifecycle(t *testing.T) {
 		t.Fatalf("missing overlay styles: %#x", style)
 	}
 	dlUser.NewProc("UpdateWindow").Call(hwnd)
-	windowDC, _, _ := dlUser.NewProc("GetDC").Call(hwnd)
+	frame := captureLyricFrame(t, hwnd)
 	foundText := false
-	for y := 12; y < 65 && !foundText; y += 2 {
-		for x := 20; x < int(c.width)-20; x += 2 {
-			color, _, _ := dlGDI.NewProc("GetPixel").Call(windowDC, uintptr(x), uintptr(y))
-			if color == 0xB3C1E5 {
-				foundText = true
-				break
-			}
+	for _, pixel := range frame.pixels {
+		if pixel == 0xffe5c1b3 {
+			foundText = true
+			break
 		}
 	}
-	dlUser.NewProc("ReleaseDC").Call(hwnd, windowDC)
 	if !foundText {
 		t.Fatal("native paint produced no foreground lyric pixels")
 	}

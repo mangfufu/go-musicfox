@@ -15,7 +15,20 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func TestWindowsLyricsNativeContextMenu(t *testing.T) {
+func waitNativeSettingsPanel(t *testing.T, hwnd uintptr) uintptr {
+	t.Helper()
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		panel, _, _ := dlUser.NewProc("GetWindow").Call(hwnd, 6) // GW_ENABLEDPOPUP
+		if panel != 0 && panel != hwnd {
+			return panel
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("settings panel did not open")
+	return 0
+}
+
+func TestWindowsLyricsNativeContextPanel(t *testing.T) {
 	if os.Getenv("MUSICFOX_NATIVE_LYRICS_TEST") != "1" {
 		t.Skip("requires an interactive Windows desktop")
 	}
@@ -25,6 +38,8 @@ func TestWindowsLyricsNativeContextMenu(t *testing.T) {
 			name = "draggable"
 		}
 		t.Run(name, func(t *testing.T) {
+			restore := nativeLyricDPI()
+			defer restore()
 			controller := NewController(configs.DesktopLyricsConfig{Enable: true, FontSize: 36, Draggable: draggable})
 			if controller == nil {
 				t.Fatal("native controller initialization failed")
@@ -36,37 +51,41 @@ func TestWindowsLyricsNativeContextMenu(t *testing.T) {
 			c.Show()
 			var result uintptr
 			dlUser.NewProc("SendMessageTimeoutW").Call(hwnd, dlRefresh, 0, 0, 2, 3000, uintptr(unsafe.Pointer(&result)))
+			dlUser.NewProc("UpdateWindow").Call(hwnd)
 			var bounds dlRect
 			dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&bounds)))
-			message, hit, point := uintptr(0x0205), uintptr(0), dlPoint{32, 32}
+			// The padded, visually transparent corners must now accept clicks.
+			for _, point := range []dlPoint{{bounds.left + 4, bounds.top + 4}, {bounds.right - 4, bounds.bottom - 4}} {
+				packed := uintptr(uint64(uint32(point.x)) | uint64(uint32(point.y))<<32)
+				if target, _, _ := dlUser.NewProc("WindowFromPoint").Call(packed); target != hwnd {
+					t.Fatalf("padded lyric region is click-through: %#x, want %#x", target, hwnd)
+				}
+			}
+			message, hit, point := uintptr(0x0205), uintptr(0), dlPoint{32, 40}
 			if draggable {
-				message, hit, point = 0x00a5, 2, dlPoint{bounds.left + 32, bounds.top + 32}
+				message, hit, point = 0x00a5, 2, dlPoint{bounds.left + 32, bounds.top + 40}
 			}
 			position := uintptr(uint32(uint16(point.x)) | uint32(uint16(point.y))<<16)
-			// Send the press/release pair rather than invoking WM_COMMAND directly.
 			dlUser.NewProc("PostMessageW").Call(hwnd, message-1, hit, position)
 			dlUser.NewProc("PostMessageW").Call(hwnd, message, hit, position)
-			thread, _, _ := dlUser.NewProc("GetWindowThreadProcessId").Call(hwnd, 0)
-			type guiThreadInfo struct {
-				size, flags                                        uint32
-				active, focus, capture, menuOwner, moveSize, caret uintptr
-				rect                                               dlRect
+			panel := waitNativeSettingsPanel(t, hwnd)
+			dlUser.NewProc("SendMessageTimeoutW").Call(panel, 0x0010, 0, 0, 2, 3000, uintptr(unsafe.Pointer(&result)))
+			if alive, _, _ := dlUser.NewProc("IsWindow").Call(hwnd); alive == 0 {
+				t.Fatal("closing settings destroyed the lyrics")
 			}
-			opened := false
+			// The dedicated handle is an alternative to right-clicking.
+			point = dlPoint{bounds.right - bounds.left - 36, 16}
+			position = uintptr(uint32(uint16(point.x)) | uint32(uint16(point.y))<<16)
+			dlUser.NewProc("PostMessageW").Call(hwnd, 0x0202, 0, position)
+			panel = waitNativeSettingsPanel(t, hwnd)
+			dlUser.NewProc("PostMessageW").Call(panel, 0x0100, 0x1b, 0) // Esc via the dialog message loop.
 			for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-				info := guiThreadInfo{}
-				info.size = uint32(unsafe.Sizeof(info))
-				dlUser.NewProc("GetGUIThreadInfo").Call(thread, uintptr(unsafe.Pointer(&info)))
-				if info.menuOwner == hwnd && info.flags&4 != 0 {
-					opened = true
-					break
+				if alive, _, _ := dlUser.NewProc("IsWindow").Call(panel); alive == 0 {
+					return
 				}
 				time.Sleep(10 * time.Millisecond)
 			}
-			dlUser.NewProc("PostMessageW").Call(hwnd, 0x001f, 0, 0) // WM_CANCELMODE
-			if !opened {
-				t.Fatal("right-button release did not open the settings popup")
-			}
+			t.Fatal("Esc did not close the settings panel")
 		})
 	}
 }
@@ -109,16 +128,6 @@ func TestWindowsLyricsNativeSettings(t *testing.T) {
 	c.configPath = path
 	hwnd := c.hwnd
 	c.mu.Unlock()
-	menu := c.buildSettingsMenu()
-	if menu == 0 {
-		t.Fatal("settings menu was not created")
-	}
-	var label [128]uint16
-	dlUser.NewProc("GetMenuStringW").Call(menu, dlLock, uintptr(unsafe.Pointer(&label[0])), 128, 0)
-	dlUser.NewProc("DestroyMenu").Call(menu)
-	if !strings.Contains(windows.UTF16ToString(label[:]), "锁定位置") {
-		t.Fatal("lock entry missing from real native menu")
-	}
 	send := func(message, command uintptr) uintptr {
 		t.Helper()
 		var result uintptr
@@ -141,7 +150,7 @@ func TestWindowsLyricsNativeSettings(t *testing.T) {
 	}
 	var before, after dlRect
 	dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&before)))
-	send(0x0111, dlSizeBase+48)
+	send(0x0111, dlLarger)
 	send(0x0111, dlBold)
 	send(0x0111, dlItalic)
 	send(0x0111, dlOpacityBase+75)
@@ -165,11 +174,16 @@ func TestWindowsLyricsNativeSettings(t *testing.T) {
 	if selected.height != -48 || selected.weight != 700 || selected.italic != 1 {
 		t.Fatalf("GDI font did not change: %+v", selected)
 	}
-	var alpha byte
-	var key, flags uint32
-	dlUser.NewProc("GetLayeredWindowAttributes").Call(hwnd, uintptr(unsafe.Pointer(&key)), uintptr(unsafe.Pointer(&alpha)), uintptr(unsafe.Pointer(&flags)))
-	if alpha != 191 {
-		t.Fatalf("opacity = %d", alpha)
+	frame := captureLyricFrame(t, hwnd)
+	foundAlpha := false
+	for _, pixel := range frame.pixels {
+		if pixel>>24 == 191 {
+			foundAlpha = true
+			break
+		}
+	}
+	if !foundAlpha {
+		t.Fatal("per-pixel opacity did not update")
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {

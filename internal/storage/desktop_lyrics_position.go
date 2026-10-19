@@ -11,6 +11,13 @@ type DesktopLyricsPosition struct {
 	Y        float64 `json:"y"`
 	XFactor  float64 `json:"x_factor"` // screen-relative horizontal center factor (0–1)
 	YFactor  float64 `json:"y_factor"` // screen-relative vertical center factor (0–1)
+	// Preserve the Windows top-left anchor across font and layout changes.
+	WindowsOrigin *DesktopLyricsOrigin `json:"windows_origin,omitempty"`
+}
+
+type DesktopLyricsOrigin struct {
+	XFactor float64 `json:"x_factor"`
+	YFactor float64 `json:"y_factor"`
 }
 
 func (p DesktopLyricsPosition) GetDbName() string {

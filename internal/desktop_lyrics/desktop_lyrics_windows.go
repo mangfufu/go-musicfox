@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"runtime"
 	"strconv"
 	"strings"
@@ -77,10 +78,12 @@ type windowsController struct {
 	done            chan struct{}
 	configPath      string
 	// UI-thread-owned resources and layout.
-	menuActive                bool
-	font, fontResource, brush uintptr
-	width, height, fontSize   int32
-	work                      dlRect
+	font, fontResource, handleFont    uintptr
+	width, height, fontSize, maxWidth int32
+	panel                             *lyricSettingsPanel
+	surface                           *lyricSurface
+	hasRendered, restoredOrigin       bool
+	work                              dlRect
 }
 
 func newController(cfg configs.DesktopLyricsConfig) Controller {
@@ -121,6 +124,11 @@ func (c *windowsController) run(ready chan<- error) {
 		if int32(result) <= 0 {
 			break
 		}
+		if c.panel != nil {
+			if handled, _, _ := dlUser.NewProc("IsDialogMessageW").Call(c.panel.hwnd, uintptr(unsafe.Pointer(&message))); handled != 0 {
+				continue
+			}
+		}
 		dlUser.NewProc("TranslateMessage").Call(uintptr(unsafe.Pointer(&message)))
 		dlUser.NewProc("DispatchMessageW").Call(uintptr(unsafe.Pointer(&message)))
 	}
@@ -151,9 +159,9 @@ func (c *windowsController) create() error {
 	if c.font == 0 {
 		return fmt.Errorf("create desktop lyric font")
 	}
-	c.brush, _, _ = dlGDI.NewProc("CreateSolidBrush").Call(dlColorKey)
-	if c.brush == 0 {
-		return fmt.Errorf("create transparent lyric background")
+	c.handleFont = createLyricFont(configs.DesktopLyricsConfig{FontName: pixelfont.Name, FontSize: 12})
+	if c.handleFont == 0 {
+		return fmt.Errorf("create lyric handle font")
 	}
 	dlUser.NewProc("SystemParametersInfoW").Call(0x0030, 0, uintptr(unsafe.Pointer(&c.work)), 0) // SPI_GETWORKAREA
 	if c.work.right <= c.work.left {
@@ -164,6 +172,7 @@ func (c *windowsController) create() error {
 		ratio = 0.7
 	}
 	c.width = int32(float64(c.work.right-c.work.left) * ratio)
+	c.maxWidth = c.width
 	c.height = c.fontSize*4 + 32
 	x, y := c.initialPosition()
 	// WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE.
@@ -174,14 +183,6 @@ func (c *windowsController) create() error {
 	}
 	c.hwnd = hwnd
 	dlContexts.Store(hwnd, c)
-	alpha := c.cfg.WindowAlpha
-	if alpha <= 0 || alpha > 1 {
-		alpha = 1
-	}
-	if ok, _, err := dlUser.NewProc("SetLayeredWindowAttributes").Call(hwnd, dlColorKey, uintptr(alpha*255), 3); ok == 0 {
-		dlUser.NewProc("DestroyWindow").Call(hwnd)
-		return fmt.Errorf("set lyric transparency: %w", err)
-	}
 	return nil
 }
 
@@ -199,6 +200,10 @@ func (c *windowsController) initialPosition() (int32, int32) {
 			xf, yf = saved.XFactor, saved.YFactor
 		}
 	}
+	if saved.WindowsOrigin != nil && saved.WindowsOrigin.XFactor >= 0 && saved.WindowsOrigin.XFactor < 1 && saved.WindowsOrigin.YFactor >= 0 && saved.WindowsOrigin.YFactor < 1 {
+		c.restoredOrigin = true
+		return c.work.left + int32(math.Round(saved.WindowsOrigin.XFactor*float64(c.work.right-c.work.left))), c.work.top + int32(math.Round(saved.WindowsOrigin.YFactor*float64(c.work.bottom-c.work.top)))
+	}
 	x := c.work.left + int32(float64(c.work.right-c.work.left)*xf) - c.width/2
 	y := c.work.top + int32(float64(c.work.bottom-c.work.top)*(1-yf)) - c.height/2
 	return max(c.work.left, min(x, c.work.right-c.width)), max(c.work.top, min(y, c.work.bottom-c.height))
@@ -213,9 +218,6 @@ func desktopLyricsWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) 
 	c := value.(*windowsController)
 	switch message {
 	case dlRefresh:
-		if c.menuActive {
-			return 0
-		}
 		c.mu.Lock()
 		visible := c.visible && !c.closed
 		c.mu.Unlock()
@@ -229,20 +231,32 @@ func desktopLyricsWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) 
 	case 0x000f: // WM_PAINT
 		c.paint(hwnd)
 		return 0
+	case 0x0318: // WM_PRINTCLIENT: expose the real rendered surface for capture.
+		if c.renderLyrics(hwnd) == nil && c.surface != nil {
+			dlGDI.NewProc("BitBlt").Call(wParam, 0, 0, uintptr(c.width), uintptr(c.height), c.surface.dc, 0, 0, 0x00CC0020)
+		}
+		return 0
 	case 0x0014: // WM_ERASEBKGND: paint via a back buffer instead.
 		return 1
 	case 0x0021: // WM_MOUSEACTIVATE
 		return 3 // MA_NOACTIVATE
 	case 0x0084: // WM_NCHITTEST
-		if c.cfg.Draggable {
+		point := dlPoint{int32(int16(lParam)), int32(int16(lParam >> 16))}
+		dlUser.NewProc("ScreenToClient").Call(hwnd, uintptr(unsafe.Pointer(&point)))
+		if c.cfg.Draggable && !c.settingsHandleContains(point) {
 			return 2
-		} // HTCAPTION; transparent pixels pass through.
+		} // HTCAPTION: drag from the full padded lyric rectangle.
 		return 1 // HTCLIENT: locked text still accepts the settings menu.
+	case 0x0202: // WM_LBUTTONUP on the persistent settings handle.
+		if c.settingsHandleContains(dlPoint{int32(int16(lParam)), int32(int16(lParam >> 16))}) {
+			c.showSettingsPanel()
+		}
+		return 0
 	case 0x00a5: // WM_NCRBUTTONUP: a borderless HTCAPTION has no system menu.
-		c.showSettingsMenu(hwnd, int32(int16(lParam&0xffff)), int32(int16(lParam>>16&0xffff)))
+		c.showSettingsPanel()
 		return 0
 	case 0x007b: // WM_CONTEXTMENU: client-area right click and keyboard menu key.
-		c.showSettingsMenu(hwnd, int32(int16(lParam&0xffff)), int32(int16(lParam>>16&0xffff)))
+		c.showSettingsPanel()
 		return 0
 	case 0x0111: // WM_COMMAND
 		if err := c.settingsCommand(hwnd, wParam&0xffff); err != nil {
@@ -252,7 +266,9 @@ func desktopLyricsWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) 
 	case 0x0232: // WM_EXITSIZEMOVE
 		c.persistPosition(hwnd)
 	case dlClose:
-		dlUser.NewProc("EndMenu").Call()
+		if c.panel != nil {
+			dlUser.NewProc("DestroyWindow").Call(c.panel.hwnd)
+		}
 		dlUser.NewProc("DestroyWindow").Call(hwnd)
 		return 0
 	case 0x0002: // WM_DESTROY
@@ -269,75 +285,11 @@ func desktopLyricsWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) 
 
 func (c *windowsController) paint(hwnd uintptr) {
 	var ps dlPaint
-	dc, _, _ := dlUser.NewProc("BeginPaint").Call(hwnd, uintptr(unsafe.Pointer(&ps)))
+	dlUser.NewProc("BeginPaint").Call(hwnd, uintptr(unsafe.Pointer(&ps)))
 	defer dlUser.NewProc("EndPaint").Call(hwnd, uintptr(unsafe.Pointer(&ps)))
-	if dc == 0 {
-		return
+	if err := c.renderLyrics(hwnd); err != nil {
+		slog.Error("Render desktop lyrics", "error", err)
 	}
-	c.mu.Lock()
-	current, next := c.current, c.next
-	c.mu.Unlock()
-	if c.cfg.OneLineMode {
-		next = ""
-	}
-	buffer, _, _ := dlGDI.NewProc("CreateCompatibleDC").Call(dc)
-	if buffer == 0 {
-		return
-	}
-	defer dlGDI.NewProc("DeleteDC").Call(buffer)
-	oldFont, _, _ := dlGDI.NewProc("SelectObject").Call(buffer, c.font)
-	defer dlGDI.NewProc("SelectObject").Call(buffer, oldFont)
-	dlGDI.NewProc("SetBkMode").Call(buffer, 1)
-	measure := func(text string) int32 {
-		if text == "" {
-			return 0
-		}
-		rect := dlRect{0, 0, c.width - 32, 0}
-		drawLyricText(buffer, text, &rect, dlTextFlags|0x0400) // DT_CALCRECT
-		return rect.bottom
-	}
-	currentHeight, nextHeight := measure(current), measure(next)
-	height := min(max(c.fontSize+32, currentHeight+nextHeight+40), (c.work.bottom-c.work.top)/2)
-	if height != c.height {
-		c.height = height
-		var bounds dlRect
-		dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&bounds)))
-		// Resize without activating or moving the text below the taskbar.
-		y := bounds.top
-		if c.cfg.Draggable {
-			y = min(y, c.work.bottom-height)
-		}
-		dlUser.NewProc("SetWindowPos").Call(hwnd, 0, uintptr(bounds.left), uintptr(y), uintptr(c.width), uintptr(height), 0x0014)
-	}
-	bitmap, _, _ := dlGDI.NewProc("CreateCompatibleBitmap").Call(dc, uintptr(c.width), uintptr(c.height))
-	if bitmap == 0 {
-		return
-	}
-	oldBitmap, _, _ := dlGDI.NewProc("SelectObject").Call(buffer, bitmap)
-	defer func() {
-		dlGDI.NewProc("SelectObject").Call(buffer, oldBitmap)
-		dlGDI.NewProc("DeleteObject").Call(bitmap)
-	}()
-	area := dlRect{0, 0, c.width, c.height}
-	dlUser.NewProc("FillRect").Call(buffer, uintptr(unsafe.Pointer(&area)), c.brush)
-	active := lyricColor(c.cfg.TextColor, 0xB3C1E5)
-	inactive := ((active & 0xff) * 2 / 3) | (((active >> 8 & 0xff) * 2 / 3) << 8) | (((active >> 16 & 0xff) * 2 / 3) << 16)
-	draw := func(text string, y, h int32, color uintptr) {
-		rect := dlRect{16, y, c.width - 16, min(c.height-8, y+h)}
-		// Hard pixel outlines remain legible over both light and dark desktops.
-		dlGDI.NewProc("SetTextColor").Call(buffer, lyricColor(c.cfg.ShadowColor, 0x101010))
-		for _, offset := range []dlPoint{{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}} {
-			shadow := dlRect{rect.left + offset.x, rect.top + offset.y, rect.right + offset.x, rect.bottom + offset.y}
-			drawLyricText(buffer, text, &shadow, dlTextFlags)
-		}
-		dlGDI.NewProc("SetTextColor").Call(buffer, color)
-		drawLyricText(buffer, text, &rect, dlTextFlags)
-	}
-	draw(current, 12, currentHeight, active)
-	if next != "" {
-		draw(next, 20+currentHeight, nextHeight, inactive)
-	}
-	dlGDI.NewProc("BitBlt").Call(dc, 0, 0, uintptr(c.width), uintptr(c.height), buffer, 0, 0, 0x00CC0020)
 }
 
 func drawLyricText(dc uintptr, text string, rect *dlRect, flags uintptr) {
@@ -366,6 +318,10 @@ func (c *windowsController) persistPosition(hwnd uintptr) {
 	position := storage.DesktopLyricsPosition{
 		XFactor: float64(rect.left+c.width/2-c.work.left) / float64(c.work.right-c.work.left),
 		YFactor: 1 - float64(rect.top+c.height/2-c.work.top)/float64(c.work.bottom-c.work.top),
+		WindowsOrigin: &storage.DesktopLyricsOrigin{
+			XFactor: float64(rect.left-c.work.left) / float64(c.work.right-c.work.left),
+			YFactor: float64(rect.top-c.work.top) / float64(c.work.bottom-c.work.top),
+		},
 	}
 	if err := storage.NewTable().SetByKVModel(position, position); err != nil {
 		slog.Warn("Save desktop lyric position", "error", err)
@@ -373,11 +329,14 @@ func (c *windowsController) persistPosition(hwnd uintptr) {
 }
 
 func (c *windowsController) release() {
+	if c.surface != nil {
+		c.surface.close()
+	}
 	if c.font != 0 {
 		dlGDI.NewProc("DeleteObject").Call(c.font)
 	}
-	if c.brush != 0 {
-		dlGDI.NewProc("DeleteObject").Call(c.brush)
+	if c.handleFont != 0 {
+		dlGDI.NewProc("DeleteObject").Call(c.handleFont)
 	}
 	if c.fontResource != 0 {
 		dlGDI.NewProc("RemoveFontMemResourceEx").Call(c.fontResource)

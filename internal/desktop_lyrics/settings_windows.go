@@ -22,17 +22,16 @@ const (
 	dlTextColor     = 105
 	dlShadowColor   = 106
 	dlResetPosition = 107
-	dlSizeBase      = 200
+	dlVertical      = 108
+	dlHorizontal    = 109
+	dlSmaller       = 110
+	dlLarger        = 111
+	dlPanelDone     = 112
 	dlFontBase      = 400
 	dlOpacityBase   = 600
 )
 
-var lyricFontChoices = []struct{ label, face string }{
-	{"中文像素 · Fusion Pixel", pixelfont.Name},
-	{"微软雅黑", "Microsoft YaHei"},
-	{"宋体", "SimSun"},
-	{"等宽 · Consolas", "Consolas"},
-}
+var lyricFontChoices = []string{pixelfont.Name, "Microsoft YaHei", "SimSun"}
 
 func normalizeLyricSettings(cfg configs.DesktopLyricsConfig) configs.DesktopLyricsConfig {
 	if cfg.FontName == "" {
@@ -67,83 +66,6 @@ func createLyricFont(cfg configs.DesktopLyricsConfig) uintptr {
 	return font
 }
 
-func appendLyricMenu(menu, flags, command uintptr, label string) {
-	dlUser.NewProc("AppendMenuW").Call(menu, flags, command, uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(label))))
-}
-
-func (c *windowsController) buildSettingsMenu() uintptr {
-	menu, _, _ := dlUser.NewProc("CreatePopupMenu").Call()
-	if menu == 0 {
-		return 0
-	}
-	checked := func(value bool) uintptr {
-		if value {
-			return 8
-		}
-		return 0
-	}
-	appendLyricMenu(menu, checked(!c.cfg.Draggable), dlLock, "锁定位置（仍可右键设置）")
-	appendLyricMenu(menu, 0x0800, 0, "")
-	sizes, _, _ := dlUser.NewProc("CreatePopupMenu").Call()
-	for _, size := range []int{12, 24, 36, 48, 60, 72, 96} {
-		appendLyricMenu(sizes, checked(int(c.cfg.FontSize) == size), dlSizeBase+uintptr(size), fmt.Sprintf("%d px", size))
-	}
-	appendLyricMenu(menu, 0x0010, sizes, fmt.Sprintf("字号 · %d px", int(c.cfg.FontSize)))
-	fonts, _, _ := dlUser.NewProc("CreatePopupMenu").Call()
-	for i, choice := range lyricFontChoices {
-		appendLyricMenu(fonts, checked(c.cfg.FontName == choice.face), dlFontBase+uintptr(i), choice.label)
-	}
-	appendLyricMenu(fonts, 0x0800, 0, "")
-	appendLyricMenu(fonts, 0, dlChooseFont, "选择其他字体与样式…")
-	appendLyricMenu(menu, 0x0010, fonts, "字体")
-	appendLyricMenu(menu, checked(c.cfg.FontBold), dlBold, "加粗")
-	appendLyricMenu(menu, checked(c.cfg.FontItalic), dlItalic, "斜体")
-	appendLyricMenu(menu, 0, dlTextColor, "文字颜色…")
-	appendLyricMenu(menu, 0, dlShadowColor, "描边颜色…")
-	opacity, _, _ := dlUser.NewProc("CreatePopupMenu").Call()
-	for _, percent := range []int{50, 75, 100} {
-		appendLyricMenu(opacity, checked(int(math.Round(c.cfg.WindowAlpha*100)) == percent), dlOpacityBase+uintptr(percent), fmt.Sprintf("%d%%", percent))
-	}
-	appendLyricMenu(menu, 0x0010, opacity, "不透明度")
-	appendLyricMenu(menu, checked(c.cfg.OneLineMode), dlOneLine, "只显示当前句")
-	appendLyricMenu(menu, 0x0800, 0, "")
-	appendLyricMenu(menu, 0, dlResetPosition, "移回屏幕底部中央")
-	return menu
-}
-
-func (c *windowsController) showSettingsMenu(hwnd uintptr, x, y int32) {
-	if c.menuActive {
-		return
-	}
-	menu := c.buildSettingsMenu()
-	if menu == 0 {
-		return
-	}
-	defer dlUser.NewProc("DestroyMenu").Call(menu)
-	c.menuActive = true
-	previous, _, _ := dlUser.NewProc("GetForegroundWindow").Call()
-	defer func() {
-		c.menuActive = false
-		dlUser.NewProc("PostMessageW").Call(hwnd, dlRefresh, 0, 0)
-		if current, _, _ := dlUser.NewProc("GetForegroundWindow").Call(); current == hwnd && previous != 0 {
-			dlUser.NewProc("SetForegroundWindow").Call(previous)
-		}
-	}()
-	if x == -1 && y == -1 {
-		var position dlRect
-		dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&position)))
-		x, y = position.left+16, position.top+16
-	}
-	dlUser.NewProc("SetForegroundWindow").Call(hwnd)
-	command, _, _ := dlUser.NewProc("TrackPopupMenu").Call(menu, 0x0102, uintptr(x), uintptr(y), 0, hwnd, 0)
-	dlUser.NewProc("PostMessageW").Call(hwnd, 0, 0, 0)
-	if command != 0 {
-		if err := c.settingsCommand(hwnd, command); err != nil {
-			c.settingsError(hwnd, err)
-		}
-	}
-}
-
 func (c *windowsController) settingsCommand(hwnd, command uintptr) error {
 	c.mu.Lock()
 	closed := c.closed
@@ -153,6 +75,19 @@ func (c *windowsController) settingsCommand(hwnd, command uintptr) error {
 	}
 	next := c.cfg
 	switch {
+	case command == dlVertical:
+		next.Vertical = true
+	case command == dlHorizontal:
+		next.Vertical = false
+	case command == dlSmaller || command == dlLarger:
+		step := 2.0
+		if strings.EqualFold(next.FontName, pixelfont.Name) {
+			step = 12
+		}
+		if command == dlSmaller {
+			step = -step
+		}
+		next.FontSize = max(12, min(96, next.FontSize+step))
 	case command == dlLock:
 		next.Draggable = !next.Draggable
 	case command == dlBold:
@@ -161,15 +96,13 @@ func (c *windowsController) settingsCommand(hwnd, command uintptr) error {
 		next.FontItalic = !next.FontItalic
 	case command == dlOneLine:
 		next.OneLineMode = !next.OneLineMode
-	case command > dlSizeBase && command <= dlSizeBase+96:
-		next.FontSize = float64(command - dlSizeBase)
 	case command >= dlFontBase && command < dlFontBase+uintptr(len(lyricFontChoices)):
-		next.FontName = lyricFontChoices[command-dlFontBase].face
+		next.FontName = lyricFontChoices[command-dlFontBase]
 	case command >= dlOpacityBase+50 && command <= dlOpacityBase+100:
 		next.WindowAlpha = float64(command-dlOpacityBase) / 100
 	case command == dlChooseFont:
 		var ok bool
-		next, ok = c.chooseFont(hwnd)
+		next, ok = c.chooseFont(c.settingsOwner(hwnd))
 		if !ok {
 			return nil
 		}
@@ -178,7 +111,7 @@ func (c *windowsController) settingsCommand(hwnd, command uintptr) error {
 		if command == dlShadowColor {
 			color = next.ShadowColor
 		}
-		selected, ok := chooseLyricColor(hwnd, color)
+		selected, ok := chooseLyricColor(c.settingsOwner(hwnd), color)
 		if !ok {
 			return nil
 		}
@@ -210,6 +143,7 @@ func desktopSettingUpdates(before, after configs.DesktopLyricsConfig) []configs.
 		{"textColor", before.TextColor, after.TextColor}, {"shadowColor", before.ShadowColor, after.ShadowColor},
 		{"windowAlpha", before.WindowAlpha, after.WindowAlpha}, {"draggable", before.Draggable, after.Draggable},
 		{"oneLineMode", before.OneLineMode, after.OneLineMode},
+		{"vertical", before.Vertical, after.Vertical},
 	} {
 		if item.old != item.next {
 			updates = append(updates, configs.TOMLUpdate{KeyPath: []string{"main", "lyric", "desktopLyrics", item.key}, Value: item.next})
@@ -243,8 +177,13 @@ func (c *windowsController) applySettings(hwnd uintptr, next configs.DesktopLyri
 	c.cfg, c.font, c.fontSize = next, font, int32(next.FontSize)
 	c.mu.Unlock()
 	dlGDI.NewProc("DeleteObject").Call(oldFont)
-	dlUser.NewProc("SetLayeredWindowAttributes").Call(hwnd, dlColorKey, uintptr(next.WindowAlpha*255), 3)
-	dlUser.NewProc("InvalidateRect").Call(hwnd, 0, 0)
+	if c.panel != nil {
+		c.panel.refresh()
+	}
+	if err := c.renderLyrics(hwnd); err != nil {
+		return err
+	}
+	c.persistPosition(hwnd)
 	return nil
 }
 
