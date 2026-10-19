@@ -61,10 +61,6 @@ func fillLyricRect(dc uintptr, rect dlRect, color uintptr) {
 	dlUser.NewProc("FillRect").Call(dc, uintptr(unsafe.Pointer(&rect)), brush)
 }
 
-func (c *windowsController) settingsHandleContains(p dlPoint) bool {
-	return p.x >= c.width-64 && p.x < c.width-8 && p.y >= 4 && p.y < 32
-}
-
 // Keep grapheme clusters intact, including combining marks and emoji sequences.
 func verticalLyricColumns(text string, rows int) [][]string {
 	var columns [][]string
@@ -113,7 +109,7 @@ func (c *windowsController) renderLyrics(hwnd uintptr) error {
 	width, height := c.maxWidth, int32(0)
 	cell := c.fontSize + 8
 	if c.cfg.Vertical {
-		rows := max(1, int((maxHeight-56)/cell))
+		rows := max(1, int((maxHeight-32)/cell))
 		currentColumns, nextColumns = verticalLyricColumns(current, rows), verticalLyricColumns(next, rows)
 		maxColumns := max(1, int((c.maxWidth-32)/cell))
 		if len(currentColumns)+len(nextColumns) > maxColumns {
@@ -130,12 +126,12 @@ func (c *windowsController) renderLyrics(hwnd uintptr) error {
 			}
 		}
 		width = max(128, int32(len(currentColumns)+len(nextColumns))*cell+32)
-		height = int32(longest)*cell + 48
+		height = int32(longest)*cell + 24
 	} else {
 		currentRect, nextRect = measure(current, width-32), measure(next, width-32)
 		width = min(c.maxWidth, max(160, max(currentRect.right, nextRect.right)+32))
 		currentRect, nextRect = measure(current, width-32), measure(next, width-32)
-		height = min(max(c.fontSize+48, currentRect.bottom+nextRect.bottom+56), maxHeight)
+		height = min(max(c.fontSize+24, currentRect.bottom+nextRect.bottom+32), maxHeight)
 	}
 	var bounds dlRect
 	dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&bounds)))
@@ -187,24 +183,18 @@ func (c *windowsController) renderLyrics(hwnd uintptr) error {
 			}
 			for _, column := range columns {
 				for row, text := range column {
-					x, y := int32(16)+columnIndex*cell, int32(36)+int32(row)*cell
+					x, y := int32(16)+columnIndex*cell, int32(12)+int32(row)*cell
 					draw(text, dlRect{x, y, x + cell, y + cell}, color)
 				}
 				columnIndex++
 			}
 		}
 	} else {
-		draw(current, dlRect{16, 36, width - 16, min(height-8, 36+currentRect.bottom)}, active)
+		draw(current, dlRect{16, 12, width - 16, min(height-8, 12+currentRect.bottom)}, active)
 		if next != "" {
-			draw(next, dlRect{16, 44 + currentRect.bottom, width - 16, height - 8}, inactive)
+			draw(next, dlRect{16, 20 + currentRect.bottom, width - 16, height - 8}, inactive)
 		}
 	}
-	// A persistent, generously padded handle makes the settings entry discoverable.
-	fillLyricRect(s.dc, dlRect{width - 64, 4, width - 8, 32}, 0x272E30)
-	dlGDI.NewProc("SelectObject").Call(s.dc, c.handleFont)
-	dlGDI.NewProc("SetTextColor").Call(s.dc, 0x4D77D4)
-	handle := dlRect{width - 64, 4, width - 8, 32}
-	drawLyricText(s.dc, "设置", &handle, 0x25) // DT_CENTER | DT_VCENTER | DT_SINGLELINE
 	dlGDI.NewProc("GdiFlush").Call()
 	// Alpha=2 keeps the entire padded rectangle hit-testable without a visible box.
 	// Text is premultiplied independently; global opacity must not erase the hit area.

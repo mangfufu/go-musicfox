@@ -453,7 +453,7 @@ emptyCharBlock = " "       # 空白字符
 
 ### Windows 桌面歌词
 
-支持透明置顶的像素歌词窗口，显示当前句、下一句及翻译，可按住歌词区域拖动。在歌词区域右键或点击“设置”可打开像素风设置面板，切换横排/竖排，调整字号、字体、粗斜体、颜色、不透明度、单句显示及锁定位置；修改立即生效并自动保存。字间留白也可点击，锁定后仍可打开面板解锁。面板支持 Tab、空格和 Esc。开启 `[main.lyric.desktopLyrics] enable = true` 后重启；默认使用程序内置的中文 Fusion Pixel 字体。详细配置与平台差异见 [桌面悬浮歌词说明](docs/cassette-view.md#windows-桌面悬浮歌词)。
+支持透明置顶的像素歌词窗口，显示当前句、下一句及翻译，可按住歌词区域拖动。在终端按 **F10**，或在终端右键菜单选择“桌面歌词设置”，即可调整横排/竖排、字号、字体、粗斜体、颜色、不透明度、单句显示及锁定位置；修改立即生效并自动保存。设置页支持方向键、Enter、鼠标点击，Esc 返回；桌面歌词不再显示设置按钮或弹出独立设置窗口。开启 `[main.lyric.desktopLyrics] enable = true` 后重启；默认使用程序内置的中文 Fusion Pixel 字体。详细配置与平台差异见 [桌面悬浮歌词说明](docs/cassette-view.md#windows-桌面悬浮歌词)。
 
 ### macOS 桌面歌词
 </summary>
@@ -643,6 +643,7 @@ Windows 可运行 `./Start-Musicfox.ps1`，首次登录与歌单选择仍在原�
 | `actionOfPlayingSong`               | 对于当前播放的操作            | `M`                                          |
 | `cassetteView`                      | 打开/关闭复古磁带视图         | `F8`                                           |
 | `switchTheme`                       | 切换主题（自动保存）          | `F9`                                           |
+| `desktopLyricsSettings`             | 桌面歌词设置                 | `F10`                                          |
 | `toggleSortOrder`                   | 切换排序顺序（电台/播客列表） | `|`                                          |
 
 注意：

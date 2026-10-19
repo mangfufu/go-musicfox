@@ -119,6 +119,7 @@ const (
 
 	OpSwitchTheme
 	OpCassetteView
+	OpDesktopLyricsSettings
 )
 
 var opNameToOperateMap = make(map[string]OperateType)
@@ -186,20 +187,21 @@ var keyBindingsRegistry = map[OperateType]OperationInfo{
 	OpShareSelectItem:                {name: "shareSelectItem", desc: "分享当前选中"},
 	OpToggleSortOrder:                {name: "toggleSortOrder", desc: "切换排序顺序"},
 
-	OpSubscribeAlbumOfPlayingSong:       {name: "subscribeAlbumOfPlayingSong", desc: "收藏播放中歌曲的专辑"},
-	OpUnsubscribeAlbumOfPlayingSong:     {name: "unsubscribeAlbumOfPlayingSong", desc: "取消收藏播放中歌曲的专辑"},
-	OpSubscribeArtistOfPlayingSong:      {name: "subscribeArtistOfPlayingSong", desc: "收藏播放中歌曲的歌手"},
-	OpUnsubscribeArtistOfPlayingSong:    {name: "unsubscribeArtistOfPlayingSong", desc: "取消收藏播放中歌曲的歌手"},
-	OpSubscribeAlbumOfSelectedSong:      {name: "subscribeAlbumOfSelectedSong", desc: "收藏选中歌曲的专辑"},
-	OpUnsubscribeAlbumOfSelectedSong:    {name: "unsubscribeAlbumOfSelectedSong", desc: "取消收藏选中歌曲的专辑"},
-	OpSubscribeArtistOfSelectedSong:     {name: "subscribeArtistOfSelectedSong", desc: "收藏选中歌曲的歌手"},
-	OpUnsubscribeArtistOfSelectedSong:   {name: "unsubscribeArtistOfSelectedSong", desc: "取消收藏选中歌曲的歌手"},
+	OpSubscribeAlbumOfPlayingSong:     {name: "subscribeAlbumOfPlayingSong", desc: "收藏播放中歌曲的专辑"},
+	OpUnsubscribeAlbumOfPlayingSong:   {name: "unsubscribeAlbumOfPlayingSong", desc: "取消收藏播放中歌曲的专辑"},
+	OpSubscribeArtistOfPlayingSong:    {name: "subscribeArtistOfPlayingSong", desc: "收藏播放中歌曲的歌手"},
+	OpUnsubscribeArtistOfPlayingSong:  {name: "unsubscribeArtistOfPlayingSong", desc: "取消收藏播放中歌曲的歌手"},
+	OpSubscribeAlbumOfSelectedSong:    {name: "subscribeAlbumOfSelectedSong", desc: "收藏选中歌曲的专辑"},
+	OpUnsubscribeAlbumOfSelectedSong:  {name: "unsubscribeAlbumOfSelectedSong", desc: "取消收藏选中歌曲的专辑"},
+	OpSubscribeArtistOfSelectedSong:   {name: "subscribeArtistOfSelectedSong", desc: "收藏选中歌曲的歌手"},
+	OpUnsubscribeArtistOfSelectedSong: {name: "unsubscribeArtistOfSelectedSong", desc: "取消收藏选中歌曲的歌手"},
 
 	OpActionOfSelected:    {name: "actionOfSelected", desc: "对于选中项或当前播放的操作"},
 	OpActionOfPlayingSong: {name: "actionOfPlayingSong", desc: "对于当前播放的操作"},
 
-	OpSwitchTheme:  {name: "switchTheme", desc: "切换主题样式"},
-	OpCassetteView: {name: "cassetteView", desc: "打开/关闭复古磁带视图"},
+	OpSwitchTheme:           {name: "switchTheme", desc: "切换主题样式"},
+	OpCassetteView:          {name: "cassetteView", desc: "打开/关闭复古磁带视图"},
+	OpDesktopLyricsSettings: {name: "desktopLyricsSettings", desc: "桌面歌词设置"},
 }
 
 // 默认操作 -> 快捷键数组映射
@@ -268,8 +270,9 @@ var defaultOtherOperateToKeys = map[OperateType][]string{
 	OpActionOfPlayingSong: {"M"},
 	OpToggleSortOrder:     {"|"},
 
-	OpSwitchTheme:  {"f9"},
-	OpCassetteView: {"f8"},
+	OpSwitchTheme:           {"f9"},
+	OpCassetteView:          {"f8"},
+	OpDesktopLyricsSettings: {"f10"},
 }
 
 var userOperateToKeys map[OperateType][]string

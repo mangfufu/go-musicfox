@@ -43,6 +43,13 @@ type Controller interface {
 	Close()
 }
 
+// SettingsController is implemented by platforms with live terminal settings.
+type SettingsController interface {
+	Settings() configs.DesktopLyricsConfig
+	ApplySettings(configs.DesktopLyricsConfig) error
+	ResetPosition() error
+}
+
 // NewController creates a platform-specific desktop lyrics controller.
 // Returns nil on unsupported platforms or when disabled.
 func NewController(cfg configs.DesktopLyricsConfig) Controller {

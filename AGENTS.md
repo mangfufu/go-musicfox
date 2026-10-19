@@ -183,11 +183,11 @@ Windows 原生桌面歌词由 `internal/desktop_lyrics/desktop_lyrics_windows.go
 
 内置菜单图标、帮助星号、通知图标/关闭按钮、磁带选中箭头与音量减号均使用 Fusion Pixel 字库支持的字符。foxful-cli 默认主题的 Powerline 分隔符置空，避免切换其他主题或 classic 布局后再次缺字；glamour 内置 Markdown 样式的任务勾选和定义箭头也改为普通字符。`hack/check_pixel_glyphs.py` 使用 fonttools 读取实际 OTF cmap，扫描应用和终端渲染依赖的内置字符串；只豁免输入别名和歌词解析中剔除的 BOM，不改写网络歌曲/歌词内容。更新 vendor 后需保留上述兼容修改并重跑检查。
 
-Windows 歌词可拖动时的 HTCAPTION 右键必须显式处理 `WM_NCRBUTTONUP`，锁定时走客户端 `WM_CONTEXTMENU`。两者与歌词右上角的“设置”按钮均打开 `panel_windows.go` 的单实例原生设置面板；原生 owner-draw 按钮保留键盘导航与控件名称，消息循环通过 `IsDialogMessageW` 支持 Tab、空格和 Esc。关闭面板只释放自身资源，退出播放器时关闭全部窗口；所有 HWND/GDI 操作仍在歌词窗口线程。
+桌面歌词设置统一由 `internal/ui/desktop_lyrics_settings.go` 在终端内显示，操作名 `desktopLyricsSettings` 默认绑定 F10，主界面右键菜单也提供入口；F8 页面打开后暂停自身刷新链，返回原页面时重新唤醒。支持键盘、鼠标、输入校验和小窗口滚动；页面保存时禁止重复操作，失败显示错误并恢复已生效配置。桌面歌词窗口仅负责文字和拖动，不再显示设置按钮或独立设置面板。
 
-`settings_windows.go` 负责字号、字体、粗斜体、颜色、不透明度、单句模式、横竖排与位置锁定的即时更新。调用 `configs.SetTOMLValues` 成功后才替换字体和配置；写文件失败保留原设置。批量编辑与 `SetTOMLValue` 共用互斥锁，避免主题和歌词设置并发覆盖。`vertical`、`fontBold`、`fontItalic` 仅 Windows 生效。竖排按 grapheme cluster 分行，长句分列，原文/译文/下一句保持各自列与颜色；受屏幕宽高约束，超限以省略号结束。锁定后保持左上角，`DesktopLyricsPosition.WindowsOrigin` 保存比例原点，兼容原有中心比例数据；重启字号/方向变化不会重新按文字中心偏移。
+Windows 控制器实现可选 `desktop_lyrics.SettingsController` 接口；`Settings()` 返回加锁快照，`ApplySettings()` / `ResetPosition()` 通过 channel 和 `WM_APP` 将请求送到窗口线程，结果由终端的异步命令接收，窗口关闭可中止等待。`settings_windows.go` 在 `configs.SetTOMLValues` 成功后才替换字体和配置；写文件失败保留原设置。批量编辑与 `SetTOMLValue` 共用互斥锁，避免主题和歌词设置并发覆盖。`vertical`、`fontBold`、`fontItalic` 仅 Windows 生效。竖排按 grapheme cluster 分行，长句分列，原文/译文/下一句保持各自列与颜色；受屏幕宽高约束，超限以省略号结束。锁定后保持左上角，`DesktopLyricsPosition.WindowsOrigin` 保存比例原点，兼容原有中心比例数据；重启字号/方向变化不会重新按文字中心偏移。
 
-原生测试除设置命令外，还检查右键入口、留白 `WindowFromPoint` 命中、真实按钮激活、窗口生命周期、设置保存和隔离数据库的重启位置。通过 `MUSICFOX_LYRICS_ARTIFACT_DIR` 可导出实际 Win32 面板与歌词表面；捕获线程须使用与窗口相同的 DPI 感知上下文，防止系统缩放裁剪。字库检查脚本覆盖新增面板字符串。
+终端测试覆盖设置操作、错误处理、缩放和页面返回；原生测试覆盖跨线程设置接口、实际字形与透明度、横竖排、窗口生命周期、保存失败回滚与隔离数据库的重启位置。通过 `MUSICFOX_LYRICS_ARTIFACT_DIR` 可导出实际 Win32 歌词表面；捕获线程须使用与窗口相同的 DPI 感知上下文，防止系统缩放裁剪。字库检查脚本覆盖新增终端设置字符串。
 
 ### 原界面事件处理
 

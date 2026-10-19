@@ -25,6 +25,7 @@ import (
 const DesktopLyricsAvailable = true
 
 const (
+	dlSettings  = 0x8002 // WM_APP + 2
 	dlRefresh   = 0x8001 // WM_APP + 1
 	dlClose     = 0x0010
 	dlColorKey  = 0x010101
@@ -78,9 +79,9 @@ type windowsController struct {
 	done            chan struct{}
 	configPath      string
 	// UI-thread-owned resources and layout.
-	font, fontResource, handleFont    uintptr
+	font, fontResource                uintptr
 	width, height, fontSize, maxWidth int32
-	panel                             *lyricSettingsPanel
+	settings                          chan lyricSettingsRequest
 	surface                           *lyricSurface
 	hasRendered, restoredOrigin       bool
 	work                              dlRect
@@ -90,7 +91,7 @@ func newController(cfg configs.DesktopLyricsConfig) Controller {
 	if !cfg.Enable {
 		return nil
 	}
-	c := &windowsController{cfg: normalizeLyricSettings(cfg), done: make(chan struct{}), configPath: app.ConfigFilePath()}
+	c := &windowsController{cfg: normalizeLyricSettings(cfg), done: make(chan struct{}), settings: make(chan lyricSettingsRequest, 1), configPath: app.ConfigFilePath()}
 	ready := make(chan error, 1)
 	go c.run(ready)
 	if err := <-ready; err != nil {
@@ -124,11 +125,6 @@ func (c *windowsController) run(ready chan<- error) {
 		if int32(result) <= 0 {
 			break
 		}
-		if c.panel != nil {
-			if handled, _, _ := dlUser.NewProc("IsDialogMessageW").Call(c.panel.hwnd, uintptr(unsafe.Pointer(&message))); handled != 0 {
-				continue
-			}
-		}
 		dlUser.NewProc("TranslateMessage").Call(uintptr(unsafe.Pointer(&message)))
 		dlUser.NewProc("DispatchMessageW").Call(uintptr(unsafe.Pointer(&message)))
 	}
@@ -158,10 +154,6 @@ func (c *windowsController) create() error {
 	c.font = createLyricFont(c.cfg)
 	if c.font == 0 {
 		return fmt.Errorf("create desktop lyric font")
-	}
-	c.handleFont = createLyricFont(configs.DesktopLyricsConfig{FontName: pixelfont.Name, FontSize: 12})
-	if c.handleFont == 0 {
-		return fmt.Errorf("create lyric handle font")
 	}
 	dlUser.NewProc("SystemParametersInfoW").Call(0x0030, 0, uintptr(unsafe.Pointer(&c.work)), 0) // SPI_GETWORKAREA
 	if c.work.right <= c.work.left {
@@ -241,34 +233,27 @@ func desktopLyricsWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) 
 	case 0x0021: // WM_MOUSEACTIVATE
 		return 3 // MA_NOACTIVATE
 	case 0x0084: // WM_NCHITTEST
-		point := dlPoint{int32(int16(lParam)), int32(int16(lParam >> 16))}
-		dlUser.NewProc("ScreenToClient").Call(hwnd, uintptr(unsafe.Pointer(&point)))
-		if c.cfg.Draggable && !c.settingsHandleContains(point) {
-			return 2
-		} // HTCAPTION: drag from the full padded lyric rectangle.
-		return 1 // HTCLIENT: locked text still accepts the settings menu.
-	case 0x0202: // WM_LBUTTONUP on the persistent settings handle.
-		if c.settingsHandleContains(dlPoint{int32(int16(lParam)), int32(int16(lParam >> 16))}) {
-			c.showSettingsPanel()
+		if c.cfg.Draggable {
+			return 2 // HTCAPTION: drag from the padded lyric rectangle.
 		}
+		return 1 // HTCLIENT
+	case 0x00a5, 0x007b: // Settings are managed in the terminal.
 		return 0
-	case 0x00a5: // WM_NCRBUTTONUP: a borderless HTCAPTION has no system menu.
-		c.showSettingsPanel()
-		return 0
-	case 0x007b: // WM_CONTEXTMENU: client-area right click and keyboard menu key.
-		c.showSettingsPanel()
-		return 0
-	case 0x0111: // WM_COMMAND
-		if err := c.settingsCommand(hwnd, wParam&0xffff); err != nil {
-			c.settingsError(hwnd, err)
+	case dlSettings:
+		request := <-c.settings
+		if request.reset {
+			x := c.work.left + (c.work.right-c.work.left-c.width)/2
+			y := max(c.work.top, c.work.bottom-c.height-48)
+			dlUser.NewProc("SetWindowPos").Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, 0x0015)
+			c.persistPosition(hwnd)
+			request.result <- nil
+		} else {
+			request.result <- c.applySettings(hwnd, normalizeLyricSettings(request.config))
 		}
 		return 0
 	case 0x0232: // WM_EXITSIZEMOVE
 		c.persistPosition(hwnd)
 	case dlClose:
-		if c.panel != nil {
-			dlUser.NewProc("DestroyWindow").Call(c.panel.hwnd)
-		}
 		dlUser.NewProc("DestroyWindow").Call(hwnd)
 		return 0
 	case 0x0002: // WM_DESTROY
@@ -334,9 +319,6 @@ func (c *windowsController) release() {
 	}
 	if c.font != 0 {
 		dlGDI.NewProc("DeleteObject").Call(c.font)
-	}
-	if c.handleFont != 0 {
-		dlGDI.NewProc("DeleteObject").Call(c.handleFont)
 	}
 	if c.fontResource != 0 {
 		dlGDI.NewProc("RemoveFontMemResourceEx").Call(c.fontResource)

@@ -73,6 +73,9 @@ func (p *cassettePage) Update(msg tea.Msg, a *model.App) (model.Page, tea.Cmd) {
 		}
 		player := p.netease.player
 		switch op {
+		case keybindings.OpDesktopLyricsSettings:
+			p.pending = false
+			return newDesktopSettingsPage(p.netease, p, p.handler), nil
 		case keybindings.OpCassetteView, keybindings.OpGoBack:
 			p.pending = false
 			return a.MustMain(), a.RerenderCmd(true)
@@ -157,6 +160,7 @@ func cassetteHints(handler *EventHandler, dashboard bool) []cassette.Hint {
 		{keybindings.OpGoBack, "BACK"},
 		{keybindings.OpPlayOrToggle, "PLAY"},
 		{keybindings.OpSwitchTheme, "THEME"},
+		{keybindings.OpDesktopLyricsSettings, "LYRIC SET"},
 		{keybindings.OpPrevious, "PREV"},
 		{keybindings.OpNext, "NEXT"},
 		{keybindings.OpVolumeDown, "VOL-"},

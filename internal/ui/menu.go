@@ -9,6 +9,7 @@ import (
 	"github.com/anhoder/foxful-cli/style"
 
 	"github.com/go-musicfox/go-musicfox/internal/configs"
+	"github.com/go-musicfox/go-musicfox/internal/keybindings"
 	"github.com/go-musicfox/go-musicfox/internal/structs"
 )
 
@@ -157,6 +158,9 @@ func runContextAction(actions []ActionItem, i int, a *model.App) (model.Page, te
 func handleGenericContextAction(n *Netease, a *model.App, id string) (model.Page, tea.Cmd) {
 	main := a.MustMain()
 	switch id {
+	case "generic:desktopLyricsSettings":
+		_, page, cmd := NewEventHandler(n).handle(keybindings.OpDesktopLyricsSettings)
+		return page, cmd
 	case "generic:refresh":
 		main.RefreshMenuWithLoading()
 		return nil, nil
