@@ -13,54 +13,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const (
-	dlLock          = 100
-	dlBold          = 101
-	dlItalic        = 102
-	dlOneLine       = 103
-	dlChooseFont    = 104
-	dlTextColor     = 105
-	dlShadowColor   = 106
-	dlResetPosition = 107
-	dlVertical      = 108
-	dlHorizontal    = 109
-	dlSmaller       = 110
-	dlLarger        = 111
-	dlPanelDone     = 112
-	dlFontBase      = 400
-	dlOpacityBase   = 600
-	dlPresetBase    = 800
-)
-
-var lyricFontChoices = []string{pixelfont.Name, "Microsoft YaHei", "SimSun"}
-
-type lyricStylePreset struct {
-	name, description, font, text, outline string
-	size                                   float64
-	bold                                   bool
-}
-
-var lyricStylePresets = []lyricStylePreset{
-	{"默认", "像素 36 px · 暖白", pixelfont.Name, "#E5C1B3", "#101010", 36, false},
-	{"琥珀像素", "像素 48 px · 加粗", pixelfont.Name, "#FFCD83", "#271B12", 48, true},
-	{"冰蓝像素", "像素 36 px · 冰蓝", pixelfont.Name, "#A9DCF5", "#132333", 36, false},
-	{"清晰雅黑", "雅黑 36 px · 加粗", "Microsoft YaHei", "#F5F7FA", "#141820", 36, true},
-	{"书页宋体", "宋体 36 px · 米白", "SimSun", "#E8D8B5", "#282119", 36, false},
-}
-
-func (p lyricStylePreset) apply(cfg configs.DesktopLyricsConfig) configs.DesktopLyricsConfig {
-	cfg.FontName, cfg.FontSize = p.font, p.size
-	cfg.FontBold, cfg.FontItalic = p.bold, false
-	cfg.TextColor, cfg.ShadowColor, cfg.WindowAlpha = p.text, p.outline, 1
-	return cfg
-}
-
-func (p lyricStylePreset) matches(cfg configs.DesktopLyricsConfig) bool {
-	return strings.EqualFold(cfg.FontName, p.font) && cfg.FontSize == p.size &&
-		cfg.FontBold == p.bold && !cfg.FontItalic && cfg.WindowAlpha == 1 &&
-		strings.EqualFold(cfg.TextColor, p.text) && strings.EqualFold(cfg.ShadowColor, p.outline)
-}
-
 func normalizeLyricSettings(cfg configs.DesktopLyricsConfig) configs.DesktopLyricsConfig {
 	if cfg.FontName == "" {
 		cfg.FontName = pixelfont.Name
@@ -92,74 +44,6 @@ func createLyricFont(cfg configs.DesktopLyricsConfig) uintptr {
 	face := windows.StringToUTF16Ptr(cfg.FontName)
 	font, _, _ := dlGDI.NewProc("CreateFontW").Call(uintptr(-int32(cfg.FontSize)), 0, 0, 0, weight, italic, 0, 0, 1, 0, 0, quality, 0, uintptr(unsafe.Pointer(face)))
 	return font
-}
-
-func (c *windowsController) settingsCommand(hwnd, command uintptr) error {
-	c.mu.Lock()
-	closed := c.closed
-	c.mu.Unlock()
-	if closed {
-		return nil
-	}
-	next := c.cfg
-	switch {
-	case command >= dlPresetBase && command < dlPresetBase+uintptr(len(lyricStylePresets)):
-		next = lyricStylePresets[command-dlPresetBase].apply(next)
-	case command == dlVertical:
-		next.Vertical = true
-	case command == dlHorizontal:
-		next.Vertical = false
-	case command == dlSmaller || command == dlLarger:
-		step := 2.0
-		if strings.EqualFold(next.FontName, pixelfont.Name) {
-			step = 12
-		}
-		if command == dlSmaller {
-			step = -step
-		}
-		next.FontSize = max(12, min(96, next.FontSize+step))
-	case command == dlLock:
-		next.Draggable = !next.Draggable
-	case command == dlBold:
-		next.FontBold = !next.FontBold
-	case command == dlItalic:
-		next.FontItalic = !next.FontItalic
-	case command == dlOneLine:
-		next.OneLineMode = !next.OneLineMode
-	case command >= dlFontBase && command < dlFontBase+uintptr(len(lyricFontChoices)):
-		next.FontName = lyricFontChoices[command-dlFontBase]
-	case command >= dlOpacityBase+50 && command <= dlOpacityBase+100:
-		next.WindowAlpha = float64(command-dlOpacityBase) / 100
-	case command == dlChooseFont:
-		var ok bool
-		next, ok = c.chooseFont(c.settingsOwner(hwnd))
-		if !ok {
-			return nil
-		}
-	case command == dlTextColor || command == dlShadowColor:
-		color := next.TextColor
-		if command == dlShadowColor {
-			color = next.ShadowColor
-		}
-		selected, ok := chooseLyricColor(c.settingsOwner(hwnd), color)
-		if !ok {
-			return nil
-		}
-		if command == dlTextColor {
-			next.TextColor = selected
-		} else {
-			next.ShadowColor = selected
-		}
-	case command == dlResetPosition:
-		x := c.work.left + (c.work.right-c.work.left-c.width)/2
-		y := max(c.work.top, c.work.bottom-c.height-48)
-		dlUser.NewProc("SetWindowPos").Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, 0x0015)
-		c.persistPosition(hwnd)
-		return nil
-	default:
-		return nil
-	}
-	return c.applySettings(hwnd, normalizeLyricSettings(next))
 }
 
 func desktopSettingUpdates(before, after configs.DesktopLyricsConfig) []configs.TOMLUpdate {
@@ -207,9 +91,6 @@ func (c *windowsController) applySettings(hwnd uintptr, next configs.DesktopLyri
 	c.cfg, c.font, c.fontSize = next, font, int32(next.FontSize)
 	c.mu.Unlock()
 	dlGDI.NewProc("DeleteObject").Call(oldFont)
-	if c.panel != nil {
-		c.panel.refresh()
-	}
 	if err := c.renderLyrics(hwnd); err != nil {
 		return err
 	}
@@ -217,56 +98,55 @@ func (c *windowsController) applySettings(hwnd uintptr, next configs.DesktopLyri
 	return nil
 }
 
-func (c *windowsController) settingsError(hwnd uintptr, err error) {
-	dlUser.NewProc("MessageBoxW").Call(hwnd, uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(err.Error()))), uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("桌面歌词设置"))), 0x10)
+// Settings returns a snapshot safe for the terminal event loop.
+func (c *windowsController) Settings() configs.DesktopLyricsConfig {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cfg
 }
 
-type dlLogFont struct {
-	height, width, escapement, orientation, weight                      int32
-	italic, underline, strikeout, charset, output, clip, quality, pitch byte
-	face                                                                [32]uint16
-}
-type dlChooseFontData struct {
-	size                                  uint32
-	owner, dc                             uintptr
-	font                                  *dlLogFont
-	pointSize                             int32
-	flags, color                          uint32
-	data, hook, template, instance, style uintptr
-	fontType, alignment                   uint16
-	minSize, maxSize                      int32
-}
-type dlChooseColorData struct {
-	size                 uint32
-	owner, instance      uintptr
-	color                uint32
-	custom               *[16]uint32
-	flags                uint32
-	data, hook, template uintptr
+func (c *windowsController) SetSettingsHandler(handler func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onSettings = handler
 }
 
-var dlDialogs = windows.NewLazySystemDLL("comdlg32.dll")
+type lyricSettingsRequest struct {
+	config configs.DesktopLyricsConfig
+	reset  bool
+	result chan error
+}
 
-func (c *windowsController) chooseFont(hwnd uintptr) (configs.DesktopLyricsConfig, bool) {
-	var font dlLogFont
-	dlGDI.NewProc("GetObjectW").Call(c.font, unsafe.Sizeof(font), uintptr(unsafe.Pointer(&font)))
-	choice := dlChooseFontData{owner: hwnd, font: &font, flags: 0x41 | 0x2000 | 0x00800000, minSize: 9, maxSize: 72}
-	choice.size = uint32(unsafe.Sizeof(choice))
-	result, _, _ := dlDialogs.NewProc("ChooseFontW").Call(uintptr(unsafe.Pointer(&choice)))
-	next := c.cfg
-	if result == 0 {
-		return next, false
+func (c *windowsController) ApplySettings(cfg configs.DesktopLyricsConfig) error {
+	return c.requestSettings(lyricSettingsRequest{config: cfg})
+}
+
+func (c *windowsController) ResetPosition() error {
+	return c.requestSettings(lyricSettingsRequest{reset: true})
+}
+
+// Marshal configuration and GDI changes onto the lyric window's owning thread.
+func (c *windowsController) requestSettings(request lyricSettingsRequest) error {
+	request.result = make(chan error, 1)
+	select {
+	case <-c.done:
+		return fmt.Errorf("桌面歌词窗口已关闭")
+	case c.settings <- request:
 	}
-	next.FontName = windows.UTF16ToString(font.face[:])
-	next.FontSize = math.Abs(float64(font.height))
-	next.FontBold, next.FontItalic = font.weight >= 600, font.italic != 0
-	return next, true
-}
-
-func chooseLyricColor(hwnd uintptr, initial string) (string, bool) {
-	var custom [16]uint32
-	choice := dlChooseColorData{owner: hwnd, color: uint32(lyricColor(initial, 0xffffff)), custom: &custom, flags: 3}
-	choice.size = uint32(unsafe.Sizeof(choice))
-	result, _, _ := dlDialogs.NewProc("ChooseColorW").Call(uintptr(unsafe.Pointer(&choice)))
-	return fmt.Sprintf("#%02X%02X%02X", choice.color&0xff, choice.color>>8&0xff, choice.color>>16&0xff), result != 0
+	c.mu.Lock()
+	hwnd, closed := c.hwnd, c.closed
+	c.mu.Unlock()
+	if closed {
+		return fmt.Errorf("桌面歌词窗口已关闭")
+	}
+	if ok, _, err := dlUser.NewProc("PostMessageW").Call(hwnd, dlSettings, 0, 0); ok == 0 {
+		<-c.settings
+		return fmt.Errorf("提交歌词设置失败：%w", err)
+	}
+	select {
+	case err := <-request.result:
+		return err
+	case <-c.done:
+		return fmt.Errorf("桌面歌词窗口已关闭")
+	}
 }

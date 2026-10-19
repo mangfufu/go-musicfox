@@ -43,9 +43,16 @@ type Controller interface {
 	Close()
 }
 
-// SettingsOpener exposes the native settings panel to terminal shortcuts.
+// SettingsController is implemented by platforms with live terminal settings.
+type SettingsController interface {
+	Settings() configs.DesktopLyricsConfig
+	ApplySettings(configs.DesktopLyricsConfig) error
+	ResetPosition() error
+}
+
+// SettingsOpener connects a native context click to the terminal settings page.
 type SettingsOpener interface {
-	OpenSettings()
+	SetSettingsHandler(func())
 }
 
 // NewController creates a platform-specific desktop lyrics controller.
