@@ -18,7 +18,7 @@ func main() {
 		Track: cassette.Track{Title: "Midnight, Side A", Artist: "The Quiet Hours"}, Album: "Room Tapes / Vol. 01",
 		Quality: "目标 无损", Mode: "列表循环", Status: "PREVIEW / 示例数据", Volume: 80,
 		Position: 24 * time.Second, Duration: 238 * time.Second, Current: 0, Selected: 1, Frame: *frame, LyricIndex: 4,
-		Hints: []cassette.Hint{{"Esc", "BACK"}, {"Space", "PLAY"}, {"[", "PREV"}, {"]", "NEXT"}, {"−/+", "VOL"}, {"p", "MODE"}, {"↑/↓", "SELECT"}, {"Enter", "LOAD"}},
+		Hints: []cassette.Hint{{"Esc", "BACK"}, {"Space", "PLAY"}, {"[", "PREV"}, {"]", "NEXT"}, {"-/+", "VOL"}, {"p", "MODE"}, {"↑/↓", "SELECT"}, {"Enter", "LOAD"}},
 	}
 	for _, title := range []string{"Midnight, Side A", "The Last Train Home", "雨停之后", "Soft Focus", "Somewhere, Slowly", "Blue Hour", "Letters on the Table", "海岸线", "A Room with No Clocks", "First Light", "Stay for a While", "Side B"} {
 		s.Queue = append(s.Queue, cassette.Track{Title: title, Artist: "The Quiet Hours"})

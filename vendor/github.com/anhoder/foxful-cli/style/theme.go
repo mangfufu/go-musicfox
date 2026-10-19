@@ -196,13 +196,13 @@ type Theme struct {
 	StatusBarNuggetLabel Highlight         // fg→same as StatusBarNugget.Fg, bg→Primary
 
 	// Status bar Powerline separator characters.
-	// Default: "\uE0B6" (left arc), "\uE0B4" (right arc).
+	// Empty by default so pixel fonts do not need private-use glyphs.
 	// Set to empty string to disable for themes with transparent backgrounds.
 	StatusBarTimeSepLeft        string // Left separator for time block
 	StatusBarBreadcrumbSepRight string // Right separator for breadcrumb block
 
 	// Menu selected item Powerline separator characters.
-	// Default: "\uE0B6" (left arc), "\uE0B4" (right arc).
+	// Empty by default so pixel fonts do not need private-use glyphs.
 	// Set to empty string to disable for themes with transparent backgrounds.
 	MenuSelectedSepLeft  string
 	MenuSelectedSepRight string
@@ -283,10 +283,10 @@ func DefaultDarkTheme() Theme {
 		HintKey:                lipgloss.Color("#6E6E6E"),
 		StatusBarBreadcrumbSep: lipgloss.Color("#757575"),
 
-		StatusBarTimeSepLeft:        "",
-		StatusBarBreadcrumbSepRight: "",
-		MenuSelectedSepLeft:         "",
-		MenuSelectedSepRight:        "",
+		StatusBarTimeSepLeft:        "",
+		StatusBarBreadcrumbSepRight: "",
+		MenuSelectedSepLeft:         "",
+		MenuSelectedSepRight:        "",
 		Background:                  lipgloss.Color("#1A1A1A"),
 		Foreground:                  lipgloss.Color("#FFFFFF"),
 		Border:                      lipgloss.Color("#333333"),
@@ -312,10 +312,10 @@ func DefaultLightTheme() Theme {
 		HintKey:                lipgloss.Color("#BDBDBD"), // Gray 400
 		StatusBarBreadcrumbSep: lipgloss.Color("#BDBDBD"),
 
-		StatusBarTimeSepLeft:        "",
-		StatusBarBreadcrumbSepRight: "",
-		MenuSelectedSepLeft:         "",
-		MenuSelectedSepRight:        "",
+		StatusBarTimeSepLeft:        "",
+		StatusBarBreadcrumbSepRight: "",
+		MenuSelectedSepLeft:         "",
+		MenuSelectedSepRight:        "",
 		Background:                  lipgloss.Color("#FFFFFF"),
 		Foreground:                  lipgloss.Color("#212121"), // Gray 900
 		Border:                      lipgloss.Color("#E0E0E0"), // Gray 300
@@ -540,19 +540,19 @@ type StyleSet struct {
 	StatusBarBreadcrumbSep lipgloss.Style
 
 	// StatusBarTimeSepLeft is the Powerline separator character at the left of the time block.
-	// Default: "\uE0B6". Set to "" to disable (e.g., transparent backgrounds).
+	// Empty by default; callers may supply a separator supported by their font.
 	StatusBarTimeSepLeft string
 
 	// StatusBarBreadcrumbSepRight is the Powerline separator character at the right of the breadcrumb block.
-	// Default: "\uE0B4". Set to "" to disable (e.g., transparent backgrounds).
+	// Empty by default; callers may supply a separator supported by their font.
 	StatusBarBreadcrumbSepRight string
 
 	// MenuSelectedSepLeft is the Powerline separator character at the left of the selected menu item.
-	// Default: "\uE0B6". Set to "" to disable.
+	// Empty by default; callers may supply a separator supported by their font.
 	MenuSelectedSepLeft string
 
 	// MenuSelectedSepRight is the Powerline separator character at the right of the selected menu item.
-	// Default: "\uE0B4". Set to "" to disable.
+	// Empty by default; callers may supply a separator supported by their font.
 	MenuSelectedSepRight string
 
 	// BackButton is the style for the back/return icon button shown before the
@@ -1048,10 +1048,10 @@ func NewStyleSet(theme Theme) StyleSet {
 			Padding(0, 1),
 		ActionHover: applyHL(lipgloss.NewStyle(), notifActionHoverHL).
 			Padding(0, 1),
-		InfoIcon:    orString(theme.Notification.InfoIcon, "ℹ "),
-		SuccessIcon: orString(theme.Notification.SuccessIcon, "✓ "),
-		WarningIcon: orString(theme.Notification.WarningIcon, "⚠ "),
-		ErrorIcon:   orString(theme.Notification.ErrorIcon, "✗ "),
+		InfoIcon:    orString(theme.Notification.InfoIcon, "i "),
+		SuccessIcon: orString(theme.Notification.SuccessIcon, "+ "),
+		WarningIcon: orString(theme.Notification.WarningIcon, "! "),
+		ErrorIcon:   orString(theme.Notification.ErrorIcon, "x "),
 	}
 
 	// Semantic colors

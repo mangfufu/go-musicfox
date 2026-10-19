@@ -11,33 +11,33 @@ import (
 
 const actionMenuKey = "action_menu"
 
-// Nerd Font 图标常量（统一使用 Nerd Font v3 Material Design Icons）
+// Use symbols present in Fusion Pixel; do not require private-use Nerd Font glyphs.
 const (
-	iconAlbum          = "󰀥 " // 专辑
-	iconArtist         = "󰠃 " // 歌手/麦克风
-	iconHeartFilled    = "󰋑 " // 收藏（实心）
-	iconHeartOutline   = "󰋕 " // 取消收藏（空心）
-	iconDownload       = "󰇚 " // 下载
-	iconDownloadDoc    = "󰈙 " // 下载文档（歌词）
-	iconThumbUp        = "󰋍 " // 喜欢
-	iconThumbDown      = "󰋓 " // 移除喜欢
-	iconThumbBan       = "󰋙 " // 不喜欢
-	iconPlaylistAdd    = "󰐕 " // 添加至歌单
-	iconPlaylistRemove = "󰝚 " // 从歌单移除
-	iconDelete         = "󰆴 " // 删除
-	iconSearch         = "󰍉 " // 搜索
-	iconShuffle        = "󰒟 " // 相似
-	iconShare          = "󰒖 " // 分享
-	iconWeb            = "󰖟 " // 网页打开
-	iconRefresh        = "󰑐 " // 刷新
-	iconPlayPause      = "󰏦 " // 播放/暂停
-	iconSkipPrevious   = "󰒮 " // 上一首
-	iconSkipNext       = "󰒭 " // 下一首
-	iconCrosshairs     = "󰋇 " // 当前选中（目标，通用回退）
-	iconMusicNote      = "󰝚 " // 当前播放（音符）
-	iconTune           = "󰘳 " // 播放控制（调节）
-	iconSong           = "󰎈 " // 歌曲（音符）
-	iconPlaylist       = "󰲹 " // 歌单（播放列表）
+	iconAlbum          = "▣ "
+	iconArtist         = "♬ "
+	iconHeartFilled    = "♥ "
+	iconHeartOutline   = "♡ "
+	iconDownload       = "↓ "
+	iconDownloadDoc    = "↓ "
+	iconThumbUp        = "+ "
+	iconThumbDown      = "- "
+	iconThumbBan       = "× "
+	iconPlaylistAdd    = "+ "
+	iconPlaylistRemove = "- "
+	iconDelete         = "× "
+	iconSearch         = "? "
+	iconShuffle        = "↔ "
+	iconShare          = "↗ "
+	iconWeb            = "◎ "
+	iconRefresh        = "↻ "
+	iconPlayPause      = "▷ "
+	iconSkipPrevious   = "◀ "
+	iconSkipNext       = "▶ "
+	iconCrosshairs     = "○ "
+	iconMusicNote      = "♪ "
+	iconTune           = "= "
+	iconSong           = "♪ "
+	iconPlaylist       = "= "
 )
 
 // itemIndent 为分组标题（Header）下的操作项前导缩进，
@@ -225,9 +225,7 @@ func selectedContextTitle(menu model.Menu, index int) string {
 	return icon + "当前选中"
 }
 
-// selectedTypeIcon 根据菜单实现的类型接口返回对应的 Nerd Font 图标，
-// 用于在右键菜单「当前选中」标题中区分歌曲/歌单/专辑/歌手。
-// 无法识别的类型回退到通用的目标图标。
+// selectedTypeIcon identifies the selected item using font-compatible symbols.
 func selectedTypeIcon(menu model.Menu) string {
 	switch menu.(type) {
 	case SongsMenu:

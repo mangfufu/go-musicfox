@@ -7,12 +7,69 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 
 	pixelfont "github.com/go-musicfox/go-musicfox/assets/fonts/fusion-pixel"
 	"github.com/go-musicfox/go-musicfox/internal/configs"
 	"golang.org/x/sys/windows"
 )
+
+func TestWindowsLyricsNativeContextMenu(t *testing.T) {
+	if os.Getenv("MUSICFOX_NATIVE_LYRICS_TEST") != "1" {
+		t.Skip("requires an interactive Windows desktop")
+	}
+	for _, draggable := range []bool{true, false} {
+		name := "locked"
+		if draggable {
+			name = "draggable"
+		}
+		t.Run(name, func(t *testing.T) {
+			controller := NewController(configs.DesktopLyricsConfig{Enable: true, FontSize: 36, Draggable: draggable})
+			if controller == nil {
+				t.Fatal("native controller initialization failed")
+			}
+			c := controller.(*windowsController)
+			t.Cleanup(c.Close)
+			hwnd := c.hwnd
+			c.Update(LyricLine{Text: "右键设置"}, LyricLine{}, 0, 0, true)
+			c.Show()
+			var result uintptr
+			dlUser.NewProc("SendMessageTimeoutW").Call(hwnd, dlRefresh, 0, 0, 2, 3000, uintptr(unsafe.Pointer(&result)))
+			var bounds dlRect
+			dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&bounds)))
+			message, hit, point := uintptr(0x0205), uintptr(0), dlPoint{32, 32}
+			if draggable {
+				message, hit, point = 0x00a5, 2, dlPoint{bounds.left + 32, bounds.top + 32}
+			}
+			position := uintptr(uint32(uint16(point.x)) | uint32(uint16(point.y))<<16)
+			// Send the press/release pair rather than invoking WM_COMMAND directly.
+			dlUser.NewProc("PostMessageW").Call(hwnd, message-1, hit, position)
+			dlUser.NewProc("PostMessageW").Call(hwnd, message, hit, position)
+			thread, _, _ := dlUser.NewProc("GetWindowThreadProcessId").Call(hwnd, 0)
+			type guiThreadInfo struct {
+				size, flags                                        uint32
+				active, focus, capture, menuOwner, moveSize, caret uintptr
+				rect                                               dlRect
+			}
+			opened := false
+			for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+				info := guiThreadInfo{}
+				info.size = uint32(unsafe.Sizeof(info))
+				dlUser.NewProc("GetGUIThreadInfo").Call(thread, uintptr(unsafe.Pointer(&info)))
+				if info.menuOwner == hwnd && info.flags&4 != 0 {
+					opened = true
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			dlUser.NewProc("PostMessageW").Call(hwnd, 0x001f, 0, 0) // WM_CANCELMODE
+			if !opened {
+				t.Fatal("right-button release did not open the settings popup")
+			}
+		})
+	}
+}
 
 func TestLyricSettingsNormalizeFontAndPreserveUnrelatedKeys(t *testing.T) {
 	pixel := normalizeLyricSettings(configs.DesktopLyricsConfig{FontSize: 31})

@@ -1121,7 +1121,7 @@ func (a *App) renderNotification(n *Notification, styles style.NotificationStyle
 			titleRunes = append(titleRunes[:effectiveWidth-1], '…')
 		}
 		titleRendered := styles.Title.Width(contentWidth - 2).Render(string(titleRunes))
-		blocks = append(blocks, titleRendered+styles.Close.Render(" ✕"))
+		blocks = append(blocks, titleRendered+styles.Close.Render(" x"))
 		remainingLines = displayLines[1:]
 	}
 	if len(remainingLines) > 0 {

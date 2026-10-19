@@ -31,7 +31,7 @@ func buildHelpMarkdown() string {
 
 	var sb strings.Builder
 	sb.WriteString("# go-musicfox 快捷键\n\n")
-	sb.WriteString("[进来给个 star ⭐️ 呗~](")
+	sb.WriteString("[进来给个 star ★ 呗~](")
 	sb.WriteString(types.AppGithubUrl)
 	sb.WriteString(")\n\n")
 

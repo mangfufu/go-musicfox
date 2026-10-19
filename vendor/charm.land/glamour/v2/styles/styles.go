@@ -17,11 +17,11 @@ const (
 	defaultHeadingPrefixH4    = "#### "
 	defaultHeadingPrefixH5    = "##### "
 	defaultHeadingPrefixH6    = "###### "
-	defaultTaskTickedPrefix   = "[✓] "
+	defaultTaskTickedPrefix   = "[x] "
 	defaultTaskUntickedPrefix = "[ ] "
 	defaultImageFormat        = "Image: {{.text}} →"
 	defaultHorizontalRule     = "\n--------\n"
-	defaultArrowBlockPrefix   = "\n🠶 "
+	defaultArrowBlockPrefix   = "\n> "
 )
 
 // Default styles.

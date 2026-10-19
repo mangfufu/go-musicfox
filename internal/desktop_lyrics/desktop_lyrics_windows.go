@@ -238,7 +238,10 @@ func desktopLyricsWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) 
 			return 2
 		} // HTCAPTION; transparent pixels pass through.
 		return 1 // HTCLIENT: locked text still accepts the settings menu.
-	case 0x007b: // WM_CONTEXTMENU, generated for both client and caption clicks.
+	case 0x00a5: // WM_NCRBUTTONUP: a borderless HTCAPTION has no system menu.
+		c.showSettingsMenu(hwnd, int32(int16(lParam&0xffff)), int32(int16(lParam>>16&0xffff)))
+		return 0
+	case 0x007b: // WM_CONTEXTMENU: client-area right click and keyboard menu key.
 		c.showSettingsMenu(hwnd, int32(int16(lParam&0xffff)), int32(int16(lParam>>16&0xffff)))
 		return 0
 	case 0x0111: // WM_COMMAND

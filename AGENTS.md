@@ -181,6 +181,10 @@ Windows 原生桌面歌词由 `internal/desktop_lyrics/desktop_lyrics_windows.go
 
 状态栏去除固定的 Nerd Font 时钟图标；磁带布局通过 `DefaultStatusBar.PlainSeparators` 禁用时间与面包屑的 Powerline 分隔符，避免中文像素字体缺字。
 
+内置菜单图标、帮助星号、通知图标/关闭按钮、磁带选中箭头与音量减号均使用 Fusion Pixel 字库支持的字符。foxful-cli 默认主题的 Powerline 分隔符置空，避免切换其他主题或 classic 布局后再次缺字；glamour 内置 Markdown 样式的任务勾选和定义箭头也改为普通字符。`hack/check_pixel_glyphs.py` 使用 fonttools 读取实际 OTF cmap，扫描应用和终端渲染依赖的内置字符串；只豁免输入别名和歌词解析中剔除的 BOM，不改写网络歌曲/歌词内容。更新 vendor 后需保留上述兼容修改并重跑检查。
+
+Windows 歌词可拖动时的 HTCAPTION 右键必须显式处理 `WM_NCRBUTTONUP`：无边框窗口没有系统菜单，不能依赖 `DefWindowProc` 转发 `WM_CONTEXTMENU`。锁定时仍走客户端右键请求。原生回归测试发送右键按下/抬起消息，通过 `GetGUIThreadInfo` 检查真实菜单循环；不能只用 WM_COMMAND 调用设置项代替入口验收。
+
 `internal/desktop_lyrics/settings_windows.go` 在歌词文字上提供原生右键菜单，支持字号、系统字体选择、粗斜体、文字/描边颜色、不透明度、单句显示、位置锁定与复位。设置在窗口线程上创建新字体，调用 `configs.SetTOMLValues` 成功后才更新渲染；失败保留原设置。批量编辑与 `SetTOMLValue` 共用互斥锁，防止主题切换与桌面设置并发覆盖，保留用户无关配置/注释。`fontBold`、`fontItalic` 仅 Windows 生效；像素字体按 12px 对齐，普通字体按整数像素。锁定后命中测试返回 HTCLIENT，保留右键解锁入口；窗口调整高度时保持原位置。播放更新始终保留下一句，由绘制阶段决定是否显示，切换单句模式无需等待下一次歌词变化。
 
 ### 原界面事件处理

@@ -41,7 +41,7 @@ func TestLyricViewportKeepsCurrentTranslation(t *testing.T) {
 	}
 	rows := (painter{DefaultPalette()}).lyricLines(s, 8)
 	plain := ansi.Strip(strings.Join(rows, "\n"))
-	if len(rows) > 8 || !strings.Contains(plain, "› line-75\n  translation-75") {
+	if len(rows) > 8 || !strings.Contains(plain, "> line-75\n  translation-75") {
 		t.Fatalf("current lyric lost: %s", plain)
 	}
 }
@@ -49,7 +49,7 @@ func TestLyricViewportKeepsCurrentTranslation(t *testing.T) {
 func TestQueueSelectionAndPlaybackAreIndependent(t *testing.T) {
 	s := Snapshot{Current: 0, Selected: 2, Queue: []Track{{Title: "playing"}, {Title: "middle"}, {Title: "selected"}}}
 	got := ansi.Strip(strings.Join((painter{DefaultPalette()}).queueLines(s, 4), "\n"))
-	if !strings.Contains(got, " ▶01") || !strings.Contains(got, "› 03") {
+	if !strings.Contains(got, " ▶01") || !strings.Contains(got, "> 03") {
 		t.Fatal(got)
 	}
 }

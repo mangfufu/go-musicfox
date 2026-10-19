@@ -369,11 +369,11 @@ func (n *Netease) InitHook(_ *model.App) {
 				signInService := service.DailySigninService{}
 				signInService.Type = "0"
 				signInService.DailySignin()
-				notifyMsg += "手机✅ "
+				notifyMsg += "手机:完成 "
 				// PC签到
 				signInService.Type = "1"
 				signInService.DailySignin()
-				notifyMsg += "PC✅ "
+				notifyMsg += "PC:完成 "
 				// 云贝签到
 				yunbeiService := service.YunbeiService{}
 				result, err := yunbeiService.Sign()
@@ -381,16 +381,16 @@ func (n *Netease) InitHook(_ *model.App) {
 				var yunbeiResult string
 				if err != nil {
 					slog.Error("云贝签到网络/接口错误", slogx.Error(err))
-					yunbeiResult = "云贝:异常❌"
+					yunbeiResult = "云贝:异常"
 				} else if result.Code != 200 {
 					slog.Warn("云贝签到返回非200", "code", result.Code, "msg", result.Message)
-					yunbeiResult = "云贝:失败❌"
+					yunbeiResult = "云贝:失败"
 				} else {
 					if result.Data.YunbeiNum > 0 {
-						yunbeiResult = fmt.Sprintf("云贝:+%d✅", result.Data.YunbeiNum)
+						yunbeiResult = fmt.Sprintf("云贝:+%d", result.Data.YunbeiNum)
 						slog.Info("云贝签到成功", "数量", result.Data.YunbeiNum)
 					} else {
-						yunbeiResult = "云贝:无奖励✅"
+						yunbeiResult = "云贝:无奖励"
 					}
 				}
 				notifyMsg += yunbeiResult

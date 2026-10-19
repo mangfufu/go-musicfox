@@ -159,7 +159,7 @@ func cassetteHints(handler *EventHandler, dashboard bool) []cassette.Hint {
 		{keybindings.OpSwitchTheme, "THEME"},
 		{keybindings.OpPrevious, "PREV"},
 		{keybindings.OpNext, "NEXT"},
-		{keybindings.OpVolumeDown, "VOL−"},
+		{keybindings.OpVolumeDown, "VOL-"},
 		{keybindings.OpVolumeUp, "VOL+"},
 		{keybindings.OpSwitchPlayMode, "MODE"},
 		{keybindings.OpMoveUp, "SELECT"},

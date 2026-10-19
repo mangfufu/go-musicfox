@@ -238,7 +238,7 @@ func (r painter) lyricLines(s Snapshot, count int) []string {
 	for i, line := range s.Lyrics {
 		prefix, color := "  ", muted
 		if i == s.LyricIndex {
-			prefix, color, activeRow = "› ", Foreground, len(rows)
+			prefix, color, activeRow = "> ", Foreground, len(rows)
 		}
 		rows = append(rows, r.ink(prefix, accent)+r.ink(clean(line.Text), color))
 		originals = append(originals, true)
@@ -272,7 +272,7 @@ func (r painter) queueLines(s Snapshot, count int) []string {
 	for i := start; i < min(len(s.Queue), start+count); i++ {
 		selector, playing, color := " ", " ", secondary
 		if i == selected {
-			selector, color = "›", Foreground
+			selector, color = ">", Foreground
 		}
 		if i == s.Current {
 			playing = "▶"
