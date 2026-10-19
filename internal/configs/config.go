@@ -64,7 +64,7 @@ func (cfg *Config) FillToModelOpts(opts *model.Options) {
 
 	// 状态栏
 	if cfg.Theme.StatusBar {
-		opts.StatusBar = &model.DefaultStatusBar{}
+		opts.StatusBar = &model.DefaultStatusBar{PlainSeparators: cfg.Theme.Layout == "cassette"}
 	}
 	if strings.EqualFold(cfg.Theme.StatusBarPosition, "bottom") {
 		opts.StatusBarPosition = model.StatusBarBottom

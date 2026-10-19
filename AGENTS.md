@@ -177,6 +177,10 @@ type Player interface {
 
 Windows 双击入口 `Start-Musicfox.cmd` 使用脚本所在目录调用 PowerShell 像素启动器，并在启动失败时暂停保留报错；专用终端配置使用 `closeOnExit="graceful"`，播放器非零退出时保留窗口。
 
+Windows 原生桌面歌词由 `internal/desktop_lyrics/desktop_lyrics_windows.go` 实现，启用 `main.lyric.desktopLyrics.enable` 后创建独立锁线程的 Win32 layered/tool/no-activate 窗口，GDI 双缓冲绘制透明像素文字。字体通过 `assets/fonts/fusion-pixel/font_windows.go` 内嵌并私有加载；播放线程只更新待显示文本和投递消息，窗口线程负责绘制/拖动/销毁与释放 GDI 资源。支持 LRC/YRC 按行同步、翻译、下一句、暂停隐藏配置与主屏比例位置持久化，不含 macOS 的频谱/逐字渐变/背景效果。歌词加载结束主动更新窗口；无内容时清空并隐藏旧句。
+
+状态栏去除固定的 Nerd Font 时钟图标；磁带布局通过 `DefaultStatusBar.PlainSeparators` 禁用时间与面包屑的 Powerline 分隔符，避免中文像素字体缺字。
+
 ### 原界面事件处理
 
 **文件**：`internal/ui/event_handler.go`

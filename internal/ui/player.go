@@ -296,7 +296,10 @@ func (p *Player) PlaySong(song structs.Song, direction PlayDirection) {
 	}
 
 	errorx.Go(func() {
-		p.lyricService.SetSong(context.Background(), song)
+		if err := p.lyricService.SetSong(context.Background(), song); err != nil {
+			slog.Warn("Load desktop lyrics", "songID", song.Id, "error", err)
+		}
+		p.updateDesktopLyrics()
 	}, true)
 
 	p.Play(player.URLMusic{
@@ -717,8 +720,8 @@ func (p *Player) updateDesktopLyrics() {
 	curLine, nextLine, currentIndex := p.netease.GetDesktopLyricsLines()
 	hasContent := curLine.Text != "" || len(curLine.Words) > 0
 	currentTimeMs := p.PassedTime().Milliseconds()
+	dl.Update(curLine, nextLine, currentIndex, currentTimeMs, state == types.Playing)
 	if configs.AppConfig.Main.Lyric.DesktopLyrics.HideOnPause && state == types.Paused {
-		dl.Update(curLine, nextLine, currentIndex, currentTimeMs, false)
 		dl.Hide()
 		return
 	}
@@ -730,11 +733,14 @@ func (p *Player) updateDesktopLyrics() {
 			if !dl.IsVisible() {
 				dl.Show()
 			}
-			dl.Update(curLine, nextLine, currentIndex, currentTimeMs, true)
+		} else {
+			dl.Hide()
 		}
 	case types.Paused:
 		if hasContent {
-			dl.Update(curLine, nextLine, currentIndex, currentTimeMs, false)
+			dl.Show()
+		} else {
+			dl.Hide()
 		}
 	case types.Stopped:
 		dl.Hide()

@@ -165,7 +165,7 @@ spinDuration = 6
 # 不使用 tmux 时，此设置不影响封面显示与旋转
 tmuxPassthrough = false
 
-# 桌面歌词设置（目前仅支持 macOS）
+# 桌面歌词设置（macOS / Windows；Windows 为透明像素歌词，频谱等高级效果仅 macOS）
 [main.lyric.desktopLyrics]
 # 是否启用桌面歌词
 enable = false
@@ -175,7 +175,7 @@ xPositionFactor = 0.5
 yPositionFactor = 0.5
 # 字体大小（默认 24 匹配系统标签字体）
 fontSize = 24
-# 字体名称（留空使用系统默认字体）
+# 字体名称（留空时 macOS 使用系统字体，Windows 使用内置 Fusion Pixel）
 fontName = ""
 # 文字颜色（十六进制）
 textColor = "#FFFFFF"

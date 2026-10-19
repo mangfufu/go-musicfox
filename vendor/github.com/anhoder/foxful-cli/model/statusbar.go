@@ -44,6 +44,8 @@ type InteractiveStatusBarComponent interface {
 // injected centered components, and the current time on the right.
 type DefaultStatusBar struct {
 	Components []StatusBarComponent
+	// PlainSeparators avoids private-use glyphs in fonts without Powerline icons.
+	PlainSeparators bool
 
 	componentBounds []statusBarComponentBounds
 
@@ -133,10 +135,11 @@ func (d *DefaultStatusBar) View(a *App, m *Main) string {
 	sepStyle := lipgloss.NewStyle().Foreground(timeBg).Background(ss.StatusBar.GetBackground())
 	// Fall back to space if no Powerline character configured (e.g., Transparent theme).
 	timeSepLeft := ss.StatusBarTimeSepLeft
-	if timeSepLeft == "" {
+	if timeSepLeft == "" || d.PlainSeparators {
 		timeSepLeft = " "
 	}
-	timeNugget := sepStyle.Render(timeSepLeft) + timeStyle.Render(" "+now+" ")
+	// Plain time also works in pixel fonts without Nerd Font private-use glyphs.
+	timeNugget := sepStyle.Render(timeSepLeft) + timeStyle.Render(now+" ")
 	timeW := lipgloss.Width(timeNugget)
 
 	// Breadcrumb: constrain to available width so bar stays single-line.
@@ -158,7 +161,7 @@ func (d *DefaultStatusBar) View(a *App, m *Main) string {
 	var breadcrumbBlock string
 	if path != "" {
 		bcSepRight := ss.StatusBarBreadcrumbSepRight
-		if bcSepRight == "" {
+		if bcSepRight == "" || d.PlainSeparators {
 			bcSepRight = " "
 		}
 		breadcrumbBlock = lipgloss.NewStyle().

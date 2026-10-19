@@ -451,6 +451,10 @@ emptyCharBlock = " "       # 空白字符
 <details>
 <summary>
 
+### Windows 桌面歌词
+
+支持透明置顶的像素歌词窗口，显示当前句、下一句及翻译，可按住文字拖动。开启 `[main.lyric.desktopLyrics] enable = true` 后重启；默认使用程序内置的中文 Fusion Pixel 字体。详细配置与平台差异见 [桌面悬浮歌词说明](docs/cassette-view.md#windows-桌面悬浮歌词)。
+
 ### macOS 桌面歌词
 </summary>
 macOS 原生桌面歌词窗口，支持 YRC 逐字高亮、频谱可视化和完整的视觉定制。

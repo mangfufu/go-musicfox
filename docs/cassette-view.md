@@ -68,7 +68,30 @@ Windows Terminal 用户运行：
 
 `Setup-PixelFont.ps1` 也可单独运行，不启动播放器。字体位于 `%LOCALAPPDATA%\Microsoft\Windows\Fonts`，配置片段位于 `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\Musicfox\pixel.json`，不更改其他终端配置。若已打开的 Windows Terminal 尚未识别新字体/配置，关闭该终端应用后重新运行。项目移动目录后重新运行脚本即可更新启动路径。
 
-字体由终端渲染，普通 `Start-Musicfox.ps1` 沿用当前终端字体。macOS/Linux 或其他终端可安装同一 OTF 后手动设置字体家族。目前桌面悬浮歌词仅有上游 macOS 实现，Windows 桌面歌词尚未实现。
+字体由终端渲染，普通 `Start-Musicfox.ps1` 沿用当前终端字体。macOS/Linux 或其他终端可安装同一 OTF 后手动设置字体家族。磁带布局的状态栏使用普通时间数字和空格分隔，不依赖 Nerd Font / Powerline 私用字形。
+
+### Windows 桌面悬浮歌词
+
+`internal/desktop_lyrics/desktop_lyrics_windows.go` 提供原生置顶透明歌词窗口，不抢走终端焦点。显示当前句、下一句和翻译，复用播放器 LRC/YRC 行位置；暂停时保留（`hideOnPause=true` 可隐藏），停止播放或退出程序时隐藏/关闭，切换到没有歌词的歌曲时清空旧句。
+
+在用户配置中启用后重启：
+
+```toml
+[main.lyric.desktopLyrics]
+enable = true
+fontName = "Fusion Pixel 12px Mono zh-Hans"
+fontSize = 36
+textColor = "#E5C1B3"
+shadowColor = "#101010"
+xPositionFactor = 0.5
+yPositionFactor = 0.15
+draggable = true
+hideOnPause = false
+```
+
+按住歌词文字拖动可移动窗口，位置在主显示器内按比例保存；透明区域让鼠标穿过。Windows 将字体大小对齐到 12px 的整数倍，字体随程序内置，无需另行安装。长行自动折行；`oneLineMode=true` 隐藏下一句，翻译仍跟随当前句显示。
+
+Windows 当前按行同步，不含 macOS 的逐字渐变、频谱、圆角背景和模糊阴影；背景始终透明，阴影为清晰像素描边。其他 macOS 专用外观字段在 Windows 不生效。将 `enable=false` 后重启可关闭桌面歌词。
 
 ### 布局
 
@@ -114,6 +137,7 @@ Windows Terminal 用户运行：
 
 - 像素字体安装后可通过 Windows 已安装字体列表找到；验证了中文/英文常用字形、字体文件校验值和配置片段 JSON。检查了字体栅格化样张，尚未对真实 Windows Terminal 窗口作像素级截图验收。
 - 更新检查的离线回归测试通过：旧显示版本、Git 哈希和定制版本均以已合并的上游发布版为基线；相同发布版不提示更新，更高发布版仍提示。重新构建后 `--version` 显示 `v5.1.0+cassette`。
+- Windows 原生歌词测试检查实际 GDI 字体选择、置顶/透明/不激活样式、显示/隐藏和关闭资源释放；播放器同步测试覆盖下一句、译文、暂停、停止和无歌词清空。运行原生测试需设置 `MUSICFOX_NATIVE_LYRICS_TEST=1` 并有可用 Windows 桌面。电脑控制工具连接不可用，未完成人工拖动和桌面截图验收。
 - 原始提交与修改版均在 Windows、Go 1.26.9、MinGW 下构建成功。
 - `go test -tags purego ./internal/cassette ./internal/ui ./internal/keybindings` 通过；覆盖中英混排、组合字符、窄矮窗口、无时长、超长标题、歌词译文、YRC、队列选择、定时链去重、暂停冻结与自定义键位。
 - 120×40、100×30、80×24 以及更小窗口的行数与显示列宽检查通过；检查过 ANSI 栅格化预览。
