@@ -29,9 +29,37 @@ const (
 	dlPanelDone     = 112
 	dlFontBase      = 400
 	dlOpacityBase   = 600
+	dlPresetBase    = 800
 )
 
 var lyricFontChoices = []string{pixelfont.Name, "Microsoft YaHei", "SimSun"}
+
+type lyricStylePreset struct {
+	name, description, font, text, outline string
+	size                                   float64
+	bold                                   bool
+}
+
+var lyricStylePresets = []lyricStylePreset{
+	{"默认", "像素 36 px · 暖白", pixelfont.Name, "#E5C1B3", "#101010", 36, false},
+	{"琥珀像素", "像素 48 px · 加粗", pixelfont.Name, "#FFCD83", "#271B12", 48, true},
+	{"冰蓝像素", "像素 36 px · 冰蓝", pixelfont.Name, "#A9DCF5", "#132333", 36, false},
+	{"清晰雅黑", "雅黑 36 px · 加粗", "Microsoft YaHei", "#F5F7FA", "#141820", 36, true},
+	{"书页宋体", "宋体 36 px · 米白", "SimSun", "#E8D8B5", "#282119", 36, false},
+}
+
+func (p lyricStylePreset) apply(cfg configs.DesktopLyricsConfig) configs.DesktopLyricsConfig {
+	cfg.FontName, cfg.FontSize = p.font, p.size
+	cfg.FontBold, cfg.FontItalic = p.bold, false
+	cfg.TextColor, cfg.ShadowColor, cfg.WindowAlpha = p.text, p.outline, 1
+	return cfg
+}
+
+func (p lyricStylePreset) matches(cfg configs.DesktopLyricsConfig) bool {
+	return strings.EqualFold(cfg.FontName, p.font) && cfg.FontSize == p.size &&
+		cfg.FontBold == p.bold && !cfg.FontItalic && cfg.WindowAlpha == 1 &&
+		strings.EqualFold(cfg.TextColor, p.text) && strings.EqualFold(cfg.ShadowColor, p.outline)
+}
 
 func normalizeLyricSettings(cfg configs.DesktopLyricsConfig) configs.DesktopLyricsConfig {
 	if cfg.FontName == "" {
@@ -75,6 +103,8 @@ func (c *windowsController) settingsCommand(hwnd, command uintptr) error {
 	}
 	next := c.cfg
 	switch {
+	case command >= dlPresetBase && command < dlPresetBase+uintptr(len(lyricStylePresets)):
+		next = lyricStylePresets[command-dlPresetBase].apply(next)
 	case command == dlVertical:
 		next.Vertical = true
 	case command == dlHorizontal:

@@ -148,9 +148,36 @@ func TestWindowsLyricsNativePanelControls(t *testing.T) {
 	if err != nil || !reloaded.Main.Lyric.DesktopLyrics.Vertical {
 		t.Fatalf("vertical setting did not persist: %v", err)
 	}
+	// Presets change appearance without moving or unlocking the lyrics.
+	var beforePreset dlRect
+	dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&beforePreset)))
+	for _, index := range []int{1, 2, 3, 4, 0} {
+		nativeLyricMessage(t, control(dlPresetBase+uintptr(index)), 0x00f5, 0, 0)
+		c.mu.Lock()
+		applied := c.cfg
+		c.mu.Unlock()
+		if !lyricStylePresets[index].matches(applied) || !applied.Vertical || applied.Draggable || applied.OneLineMode != cfg.OneLineMode {
+			t.Fatalf("preset %d changed layout or did not apply: %+v", index, applied)
+		}
+		var afterPreset dlRect
+		dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&afterPreset)))
+		if afterPreset.left != beforePreset.left || afterPreset.top != beforePreset.top {
+			t.Fatal("preset moved the locked lyrics")
+		}
+	}
+	reloaded, err = configs.NewConfigFromTomlFile(path)
+	if err != nil || !lyricStylePresets[0].matches(reloaded.Main.Lyric.DesktopLyrics) {
+		t.Fatalf("default preset did not persist: %v", err)
+	}
+	custom := reloaded.Main.Lyric.DesktopLyrics
+	custom.FontBold = !custom.FontBold
+	if lyricStylePresets[0].matches(custom) {
+		t.Fatal("manual edits still select the default preset")
+	}
+	frame = captureLyricFrame(t, hwnd)
 	if folder := os.Getenv("MUSICFOX_LYRICS_ARTIFACT_DIR"); folder != "" {
 		saveLyricTestPNG(t, frame, filepath.Join(folder, "lyrics-vertical.png"), true)
-		panelFrame, err := newLyricSurface(600, 620)
+		panelFrame, err := newLyricSurface(dlPanelWidth, dlPanelHeight)
 		if err != nil {
 			t.Fatal(err)
 		}

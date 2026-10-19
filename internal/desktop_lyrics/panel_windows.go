@@ -14,6 +14,8 @@ import (
 )
 
 const (
+	dlPanelWidth      = 824
+	dlPanelHeight     = 620
 	dlPanelBackground = 0x111415
 	dlPanelSurface    = 0x272E30
 	dlPanelBorder     = 0x3E484B
@@ -85,7 +87,7 @@ func (c *windowsController) showSettingsPanel() {
 	}
 	const windowStyle = 0x00c80000   // WS_CAPTION | WS_SYSMENU
 	const extendedStyle = 0x00010080 // WS_EX_CONTROLPARENT | WS_EX_TOOLWINDOW
-	bounds := dlRect{0, 0, 600, 620}
+	bounds := dlRect{0, 0, dlPanelWidth, dlPanelHeight}
 	dlUser.NewProc("AdjustWindowRectEx").Call(uintptr(unsafe.Pointer(&bounds)), windowStyle, 0, extendedStyle)
 	width, height := bounds.right-bounds.left, bounds.bottom-bounds.top
 	x, y := c.work.left+(c.work.right-c.work.left-width)/2, max(c.work.top, c.work.top+(c.work.bottom-c.work.top-height)/2)
@@ -128,6 +130,9 @@ func (c *windowsController) showSettingsPanel() {
 	button(dlOneLine, "仅当前句", 312, 492, 264)
 	button(dlResetPosition, "位置复位", 24, 556, 264)
 	button(dlPanelDone, "完成", 404, 556, 172)
+	for i, preset := range lyricStylePresets {
+		button(dlPresetBase+uintptr(i), preset.name, 624, 140+int32(i)*76, 176)
+	}
 	p.refresh()
 	dlUser.NewProc("ShowWindow").Call(p.hwnd, 5)
 	dlUser.NewProc("SetForegroundWindow").Call(p.hwnd)
@@ -225,7 +230,7 @@ func panelText(dc, font uintptr, text string, rect dlRect, color uintptr, flags 
 }
 
 func (p *lyricSettingsPanel) paint(dc uintptr) {
-	fillLyricRect(dc, dlRect{0, 0, 600, 620}, dlPanelBackground)
+	fillLyricRect(dc, dlRect{0, 0, dlPanelWidth, dlPanelHeight}, dlPanelBackground)
 	panelText(dc, p.smallFont, "MUSICFOX / DESKTOP LYRICS", dlRect{24, 20, 576, 36}, dlPanelAccent, 0)
 	panelText(dc, p.font, "桌面歌词", dlRect{24, 42, 576, 72}, dlPanelInk, 0)
 	panelText(dc, p.smallFont, "实时预览 · 自动保存", dlRect{24, 80, 576, 96}, dlPanelMuted, 0)
@@ -246,10 +251,26 @@ func (p *lyricSettingsPanel) paint(dc uintptr) {
 		dlGDI.NewProc("DeleteObject").Call(preview)
 	}
 	panelText(dc, p.smallFont, "右键歌词区域或在终端按 F10 可再次打开", dlRect{24, 604, 576, 620}, dlPanelMuted, 0)
+	fillLyricRect(dc, dlRect{600, 104, 601, 596}, dlPanelBorder)
+	panelText(dc, p.smallFont, "搭配预设", dlRect{624, 114, 800, 132}, dlPanelMuted, 0)
+	current := "自定义"
+	for i, preset := range lyricStylePresets {
+		y := int32(184 + i*76)
+		panelText(dc, p.smallFont, preset.description, dlRect{624, y, 800, y + 18}, dlPanelMuted, 0)
+		if preset.matches(cfg) {
+			current = preset.name
+		}
+	}
+	panelText(dc, p.smallFont, "当前："+current, dlRect{624, 540, 800, 558}, dlPanelAccent, 0)
+	panelText(dc, p.smallFont, "一键应用字体与配色", dlRect{624, 572, 800, 590}, dlPanelMuted, 0)
+	panelText(dc, p.smallFont, "保留位置、锁定和方向", dlRect{624, 592, 800, 610}, dlPanelMuted, 0)
 }
 
 func (p *lyricSettingsPanel) selected(id uintptr) bool {
 	cfg := p.controller.cfg
+	if id >= dlPresetBase && id < dlPresetBase+uintptr(len(lyricStylePresets)) {
+		return lyricStylePresets[id-dlPresetBase].matches(cfg)
+	}
 	switch id {
 	case dlHorizontal:
 		return !cfg.Vertical

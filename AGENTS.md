@@ -185,7 +185,7 @@ Windows 原生桌面歌词由 `internal/desktop_lyrics/desktop_lyrics_windows.go
 
 桌面歌词设置由 `internal/desktop_lyrics/panel_windows.go` 提供独立像素风 Win32 面板。歌词窗口处理 `WM_NCRBUTTONUP` / `WM_CONTEXTMENU` 直接打开面板，锁定和未锁定都有效；歌词上不绘制设置按钮。终端操作 `desktopLyricsSettings`（默认 F10）及右键菜单通过可选 `SettingsOpener.OpenSettings()` 投递 `WM_APP` 消息打开同一个面板，不切换页面，不暂停 F8 页刷新。面板为单实例，重复打开前置已有窗口；原生 owner-draw 按钮保留键盘导航与控件名称，消息循环通过 `IsDialogMessageW` 支持 Tab、空格和 Esc。关闭面板只释放自身资源，退出播放器时关闭全部窗口；所有 HWND/GDI 操作均在歌词窗口线程。
 
-`settings_windows.go` 负责字号、字体、粗斜体、颜色、不透明度、单句模式、横竖排与位置锁定的即时更新。调用 `configs.SetTOMLValues` 成功后才替换字体和配置；写文件失败保留原设置。批量编辑与 `SetTOMLValue` 共用互斥锁，避免主题和歌词设置并发覆盖。`vertical`、`fontBold`、`fontItalic` 仅 Windows 生效。竖排按 grapheme cluster 分行，长句分列，原文/译文/下一句保持各自列与颜色；受屏幕宽高约束，超限以省略号结束。锁定后保持左上角，`DesktopLyricsPosition.WindowsOrigin` 保存比例原点，兼容原有中心比例数据；重启字号/方向变化不会重新按文字中心偏移。
+`settings_windows.go` 负责字号、字体、粗斜体、颜色、不透明度、单句模式、横竖排与位置锁定的即时更新。 `lyricStylePresets` 提供默认、琥珀像素、冰蓝像素、清晰雅黑、书页宋体五套外观，复用同一保存流程，仅修改字体/字号/字形/颜色/透明度，保留位置、锁定、方向和单句模式；预设选中状态由实际配置匹配得出，不存额外预设名称，手动调整后可显示自定义。面板右侧展示搭配按钮及说明，`dlPanelWidth` / `dlPanelHeight` 与原生截图测试共用尺寸。调用 `configs.SetTOMLValues` 成功后才替换字体和配置；写文件失败保留原设置。批量编辑与 `SetTOMLValue` 共用互斥锁，避免主题和歌词设置并发覆盖。`vertical`、`fontBold`、`fontItalic` 仅 Windows 生效。竖排按 grapheme cluster 分行，长句分列，原文/译文/下一句保持各自列与颜色；受屏幕宽高约束，超限以省略号结束。锁定后保持左上角，`DesktopLyricsPosition.WindowsOrigin` 保存比例原点，兼容原有中心比例数据；重启字号/方向变化不会重新按文字中心偏移。
 
 终端测试覆盖 F10/右键入口与页面保留；原生测试覆盖右键与跨线程打开、透明留白命中、真实按钮、窗口生命周期、设置保存与隔离数据库的重启位置。通过 `MUSICFOX_LYRICS_ARTIFACT_DIR` 可导出实际 Win32 面板与歌词表面；捕获线程须使用与窗口相同的 DPI 感知上下文，防止系统缩放裁剪。字库检查脚本覆盖面板字符串。
 
