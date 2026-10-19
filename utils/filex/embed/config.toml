@@ -177,6 +177,9 @@ yPositionFactor = 0.5
 fontSize = 24
 # 字体名称（留空时 macOS 使用系统字体，Windows 使用内置 Fusion Pixel）
 fontName = ""
+# Font styles for Windows desktop lyrics
+fontBold = false
+fontItalic = false
 # 文字颜色（十六进制）
 textColor = "#FFFFFF"
 # 文字阴影颜色（十六进制）

@@ -223,6 +223,9 @@ type DesktopLyricsConfig struct {
 	FontSize float64 `koanf:"fontSize"`
 	// 字体名称
 	FontName string `koanf:"fontName"`
+	// Font styles for Windows desktop lyrics.
+	FontBold   bool `koanf:"fontBold"`
+	FontItalic bool `koanf:"fontItalic"`
 	// 文字颜色（十六进制）
 	TextColor string `koanf:"textColor"`
 	// 文字阴影颜色（十六进制）

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math"
 	"runtime"
 	"strconv"
 	"strings"
@@ -19,6 +18,7 @@ import (
 	"github.com/go-musicfox/go-musicfox/internal/configs"
 	"github.com/go-musicfox/go-musicfox/internal/player"
 	"github.com/go-musicfox/go-musicfox/internal/storage"
+	"github.com/go-musicfox/go-musicfox/utils/app"
 )
 
 const DesktopLyricsAvailable = true
@@ -75,7 +75,9 @@ type windowsController struct {
 	visible, closed bool
 	current, next   string
 	done            chan struct{}
+	configPath      string
 	// UI-thread-owned resources and layout.
+	menuActive                bool
 	font, fontResource, brush uintptr
 	width, height, fontSize   int32
 	work                      dlRect
@@ -85,7 +87,7 @@ func newController(cfg configs.DesktopLyricsConfig) Controller {
 	if !cfg.Enable {
 		return nil
 	}
-	c := &windowsController{cfg: cfg, done: make(chan struct{})}
+	c := &windowsController{cfg: normalizeLyricSettings(cfg), done: make(chan struct{}), configPath: app.ConfigFilePath()}
 	ready := make(chan error, 1)
 	go c.run(ready)
 	if err := <-ready; err != nil {
@@ -144,18 +146,8 @@ func (c *windowsController) create() error {
 	if c.fontResource == 0 {
 		return fmt.Errorf("load embedded pixel font")
 	}
-	c.fontSize = int32(math.Round(c.cfg.FontSize/12) * 12)
-	if c.fontSize < 12 {
-		c.fontSize = 24
-	}
-	c.fontSize = min(c.fontSize, 96)
-	face := c.cfg.FontName
-	if face == "" {
-		face = pixelfont.Name
-	}
-	facePtr := windows.StringToUTF16Ptr(face)
-	// Negative height requests character height; quality=3 disables antialiasing.
-	c.font, _, _ = dlGDI.NewProc("CreateFontW").Call(uintptr(-c.fontSize), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 3, 0, uintptr(unsafe.Pointer(facePtr)))
+	c.fontSize = int32(c.cfg.FontSize)
+	c.font = createLyricFont(c.cfg)
 	if c.font == 0 {
 		return fmt.Errorf("create desktop lyric font")
 	}
@@ -221,6 +213,9 @@ func desktopLyricsWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) 
 	c := value.(*windowsController)
 	switch message {
 	case dlRefresh:
+		if c.menuActive {
+			return 0
+		}
 		c.mu.Lock()
 		visible := c.visible && !c.closed
 		c.mu.Unlock()
@@ -242,9 +237,19 @@ func desktopLyricsWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) 
 		if c.cfg.Draggable {
 			return 2
 		} // HTCAPTION; transparent pixels pass through.
+		return 1 // HTCLIENT: locked text still accepts the settings menu.
+	case 0x007b: // WM_CONTEXTMENU, generated for both client and caption clicks.
+		c.showSettingsMenu(hwnd, int32(int16(lParam&0xffff)), int32(int16(lParam>>16&0xffff)))
+		return 0
+	case 0x0111: // WM_COMMAND
+		if err := c.settingsCommand(hwnd, wParam&0xffff); err != nil {
+			c.settingsError(hwnd, err)
+		}
+		return 0
 	case 0x0232: // WM_EXITSIZEMOVE
 		c.persistPosition(hwnd)
 	case dlClose:
+		dlUser.NewProc("EndMenu").Call()
 		dlUser.NewProc("DestroyWindow").Call(hwnd)
 		return 0
 	case 0x0002: // WM_DESTROY
@@ -269,6 +274,9 @@ func (c *windowsController) paint(hwnd uintptr) {
 	c.mu.Lock()
 	current, next := c.current, c.next
 	c.mu.Unlock()
+	if c.cfg.OneLineMode {
+		next = ""
+	}
 	buffer, _, _ := dlGDI.NewProc("CreateCompatibleDC").Call(dc)
 	if buffer == 0 {
 		return
@@ -292,7 +300,10 @@ func (c *windowsController) paint(hwnd uintptr) {
 		var bounds dlRect
 		dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&bounds)))
 		// Resize without activating or moving the text below the taskbar.
-		y := min(bounds.top, c.work.bottom-height)
+		y := bounds.top
+		if c.cfg.Draggable {
+			y = min(y, c.work.bottom-height)
+		}
 		dlUser.NewProc("SetWindowPos").Call(hwnd, 0, uintptr(bounds.left), uintptr(y), uintptr(c.width), uintptr(height), 0x0014)
 	}
 	bitmap, _, _ := dlGDI.NewProc("CreateCompatibleBitmap").Call(dc, uintptr(c.width), uintptr(c.height))
@@ -393,9 +404,6 @@ func (c *windowsController) Update(current, next LyricLine, _ int, _ int64, _ bo
 		return
 	}
 	curText, nextText := desktopLineText(current), desktopLineText(next)
-	if c.cfg.OneLineMode {
-		nextText = ""
-	}
 	if c.current == curText && c.next == nextText {
 		return
 	}

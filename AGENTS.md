@@ -181,6 +181,8 @@ Windows 原生桌面歌词由 `internal/desktop_lyrics/desktop_lyrics_windows.go
 
 状态栏去除固定的 Nerd Font 时钟图标；磁带布局通过 `DefaultStatusBar.PlainSeparators` 禁用时间与面包屑的 Powerline 分隔符，避免中文像素字体缺字。
 
+`internal/desktop_lyrics/settings_windows.go` 在歌词文字上提供原生右键菜单，支持字号、系统字体选择、粗斜体、文字/描边颜色、不透明度、单句显示、位置锁定与复位。设置在窗口线程上创建新字体，调用 `configs.SetTOMLValues` 成功后才更新渲染；失败保留原设置。批量编辑与 `SetTOMLValue` 共用互斥锁，防止主题切换与桌面设置并发覆盖，保留用户无关配置/注释。`fontBold`、`fontItalic` 仅 Windows 生效；像素字体按 12px 对齐，普通字体按整数像素。锁定后命中测试返回 HTCLIENT，保留右键解锁入口；窗口调整高度时保持原位置。播放更新始终保留下一句，由绘制阶段决定是否显示，切换单句模式无需等待下一次歌词变化。
+
 ### 原界面事件处理
 
 **文件**：`internal/ui/event_handler.go`

@@ -5,15 +5,33 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"github.com/pelletier/go-toml/v2/unstable"
 	tomledit "github.com/pelletier/go-toml/v2/unstable/edit"
 )
 
+var tomlEditMu sync.Mutex
+
+// TOMLUpdate describes one value in an atomic configuration edit.
+type TOMLUpdate struct {
+	KeyPath []string
+	Value   any
+}
+
 // SetTOMLValue updates a TOML value while preserving unrelated layout and comments.
 func SetTOMLValue(path string, keyPath []string, value any) error {
-	if len(keyPath) == 0 {
-		return fmt.Errorf("TOML key path must not be empty")
+	return SetTOMLValues(path, []TOMLUpdate{{KeyPath: keyPath, Value: value}})
+}
+
+// SetTOMLValues commits related settings together without rewriting other keys.
+func SetTOMLValues(path string, updates []TOMLUpdate) error {
+	tomlEditMu.Lock()
+	defer tomlEditMu.Unlock()
+	for _, update := range updates {
+		if len(update.KeyPath) == 0 {
+			return fmt.Errorf("TOML key path must not be empty")
+		}
 	}
 
 	data, err := os.ReadFile(path)
@@ -29,8 +47,10 @@ func SetTOMLValue(path string, keyPath []string, value any) error {
 	if err != nil {
 		return fmt.Errorf("parse TOML file: %w", err)
 	}
-	if err := document.Set(keyPath, tomlEditValue(value)); err != nil {
-		return fmt.Errorf("set TOML value: %w", err)
+	for _, update := range updates {
+		if err := document.Set(update.KeyPath, tomlEditValue(update.Value)); err != nil {
+			return fmt.Errorf("set TOML value: %w", err)
+		}
 	}
 
 	return replaceTOMLFile(path, document.Bytes(), info.Mode().Perm())
