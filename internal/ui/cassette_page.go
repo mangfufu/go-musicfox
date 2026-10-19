@@ -74,8 +74,8 @@ func (p *cassettePage) Update(msg tea.Msg, a *model.App) (model.Page, tea.Cmd) {
 		player := p.netease.player
 		switch op {
 		case keybindings.OpDesktopLyricsSettings:
-			p.pending = false
-			return newDesktopSettingsPage(p.netease, p, p.handler), nil
+			p.netease.openDesktopLyricsSettings()
+			return p, nil
 		case keybindings.OpCassetteView, keybindings.OpGoBack:
 			p.pending = false
 			return a.MustMain(), a.RerenderCmd(true)

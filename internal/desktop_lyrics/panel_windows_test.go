@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"testing"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/go-musicfox/go-musicfox/internal/configs"
 	"github.com/go-musicfox/go-musicfox/internal/storage"
+	"golang.org/x/sys/windows"
 )
 
 func nativeLyricDPI() func() {
@@ -88,6 +90,99 @@ func TestVerticalLyricsKeepClustersAndTranslation(t *testing.T) {
 	got = verticalLyricColumns("e\u0301👨‍👩‍👧‍👦中", 2)
 	if len(got) != 2 || got[0][0] != "e\u0301" || got[0][1] != "👨‍👩‍👧‍👦" || got[1][0] != "中" {
 		t.Fatal("grapheme cluster split across rows")
+	}
+}
+
+func TestWindowsLyricsNativePanelControls(t *testing.T) {
+	if os.Getenv("MUSICFOX_NATIVE_LYRICS_TEST") != "1" {
+		t.Skip("requires an interactive Windows desktop")
+	}
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[main.lyric.desktopLyrics]\nenable = true\nfontSize = 36\ndraggable = true\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	controller := NewController(configs.DesktopLyricsConfig{Enable: true, FontSize: 36, Draggable: true, TextColor: "#E5C1B3", ShadowColor: "#101010"})
+	if controller == nil {
+		t.Fatal("create controller")
+	}
+	c := controller.(*windowsController)
+	t.Cleanup(c.Close)
+	c.mu.Lock()
+	c.configPath = path
+	hwnd := c.hwnd
+	c.mu.Unlock()
+	c.Update(LyricLine{Text: "月光落在窗前\n风声经过耳边"}, LyricLine{Text: "下一句仍在身边"}, 0, 0, true)
+	c.Show()
+	nativeLyricMessage(t, hwnd, dlRefresh, 0, 0)
+	nativeLyricMessage(t, hwnd, 0x007b, 0, ^uintptr(0))
+	panel := waitNativeSettingsPanel(t, hwnd)
+	control := func(id uintptr) uintptr {
+		h, _, _ := dlUser.NewProc("GetDlgItem").Call(panel, id)
+		if h == 0 {
+			t.Fatalf("missing control %d", id)
+		}
+		return h
+	}
+	var label [128]uint16
+	dlUser.NewProc("GetWindowTextW").Call(control(dlLock), uintptr(unsafe.Pointer(&label[0])), 128)
+	if windows.UTF16ToString(label[:]) != "锁定位置" {
+		t.Fatal("lock label contains extra explanation")
+	}
+	// Exercise actual native button activation, not the settings dispatcher directly.
+	for _, id := range []uintptr{dlVertical, dlLarger, dlBold, dlLock} {
+		nativeLyricMessage(t, control(id), 0x00f5, 0, 0)
+	}
+	frame := captureLyricFrame(t, hwnd)
+	c.mu.Lock()
+	cfg := c.cfg
+	c.mu.Unlock()
+	if !cfg.Vertical || cfg.FontSize != 48 || !cfg.FontBold || cfg.Draggable {
+		t.Fatalf("panel controls did not apply: %+v", cfg)
+	}
+	if frame.height <= frame.width {
+		t.Fatalf("vertical layout is not column-shaped: %dx%d", frame.width, frame.height)
+	}
+	bindings := configs.EffectiveKeybindings
+	t.Cleanup(func() { configs.EffectiveKeybindings = bindings })
+	reloaded, err := configs.NewConfigFromTomlFile(path)
+	if err != nil || !reloaded.Main.Lyric.DesktopLyrics.Vertical {
+		t.Fatalf("vertical setting did not persist: %v", err)
+	}
+	if folder := os.Getenv("MUSICFOX_LYRICS_ARTIFACT_DIR"); folder != "" {
+		saveLyricTestPNG(t, frame, filepath.Join(folder, "lyrics-vertical.png"), true)
+		panelFrame, err := newLyricSurface(600, 620)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer panelFrame.close()
+		if ok, _, err := dlUser.NewProc("PrintWindow").Call(panel, panelFrame.dc, 1); ok == 0 {
+			t.Fatalf("capture settings: %v", err)
+		}
+		dlGDI.NewProc("GdiFlush").Call()
+		saveLyricTestPNG(t, panelFrame, filepath.Join(folder, "lyrics-settings.png"), false)
+	}
+	nativeLyricMessage(t, control(dlHorizontal), 0x00f5, 0, 0)
+	frame = captureLyricFrame(t, hwnd)
+	if frame.width <= frame.height {
+		t.Fatal("horizontal layout was not restored")
+	}
+	for i := 0; i < 3; i++ {
+		nativeLyricMessage(t, control(dlSmaller), 0x00f5, 0, 0)
+	}
+	nativeLyricMessage(t, control(dlSmaller), 0x00f5, 0, 0)
+	c.mu.Lock()
+	size := c.cfg.FontSize
+	c.mu.Unlock()
+	if size != 12 {
+		t.Fatal("minimum font size wrapped back to the default")
+	}
+	nativeLyricMessage(t, control(dlPanelDone), 0x00f5, 0, 0)
+	if alive, _, _ := dlUser.NewProc("IsWindow").Call(panel); alive != 0 {
+		t.Fatal("Done did not close the panel")
+	}
+	c.Close()
+	if alive, _, _ := dlUser.NewProc("IsWindow").Call(hwnd); alive != 0 {
+		t.Fatal("lyric window leaked")
 	}
 }
 

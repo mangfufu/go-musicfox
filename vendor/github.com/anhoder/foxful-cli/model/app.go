@@ -231,16 +231,6 @@ func (a *App) Update(msg tea.Msg) (model tea.Model, returnCmd tea.Cmd) {
 	// regardless of any open modal. These are never Key/Mouse messages, so the
 	// locks at the top of Update do not apply.
 	switch msgWithType := msg.(type) {
-	case OpenPageMsg:
-		if msgWithType.Build == nil {
-			return a, nil
-		}
-		page, cmd := msgWithType.Build(a.CurPage())
-		if page != nil {
-			a.modalStack = nil
-			a.setPage(page)
-		}
-		return a, cmd
 	case ShowNotificationMsg:
 		return a, a.handleShowNotification(msgWithType.Spec)
 	case notificationExpireMsg:
@@ -623,18 +613,6 @@ func (a *App) WindowHeight() int {
 
 func (a *App) CurPage() Page {
 	return a.getPage()
-}
-
-// OpenPageMsg builds a page on the event loop, preserving the previous page.
-type OpenPageMsg struct {
-	Build func(Page) (Page, tea.Cmd)
-}
-
-// OpenPage safely requests navigation from a native callback without blocking it.
-func (a *App) OpenPage(build func(Page) (Page, tea.Cmd)) {
-	if a.program != nil {
-		go a.program.Send(OpenPageMsg{Build: build})
-	}
 }
 
 // getPage 在读锁保护下返回当前页面，可从任意 goroutine 调用。
