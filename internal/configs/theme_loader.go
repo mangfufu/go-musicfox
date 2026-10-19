@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -66,7 +67,7 @@ func loadBuiltinThemes() map[string]*ThemeFile {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".toml") {
 			continue
 		}
-		data, err := filex.ReadFileFromEmbed(filepath.Join(BuiltinThemesDir, entry.Name()))
+		data, err := filex.ReadFileFromEmbed(path.Join(BuiltinThemesDir, entry.Name()))
 		if err != nil {
 			slog.Warn("failed to read built-in theme file", "file", entry.Name(), "err", err)
 			continue
@@ -124,16 +125,18 @@ func parseThemeFile(content string) (*ThemeFile, error) {
 	return &tf, nil
 }
 
-
 // builtinThemePriority defines the fixed display order of built-in themes.
 // Themes not in this map (user-defined) sort alphabetically after built-in themes.
 var builtinThemePriority = map[string]int{
-	"Default":     0,
-	"Transparent": 1,
-	"GitHub":      2,
-	"Dracula":     3,
-	"Nord":        4,
-	"Gruvbox":     5,
+	"Cassette":      -3,
+	"Midnight Tape": -2,
+	"Paper Tape":    -1,
+	"Default":       0,
+	"Transparent":   1,
+	"GitHub":        2,
+	"Dracula":       3,
+	"Nord":          4,
+	"Gruvbox":       5,
 }
 
 // sortThemeNames sorts theme names: built-in themes first by priority, then
@@ -154,6 +157,7 @@ func sortThemeNames(names []string) {
 		return names[i] < names[j]
 	})
 }
+
 // BuildThemeList converts a map of theme files into a flat []style.Theme slice
 // for foxful-cli's ThemeList, and returns the sorted list of names for UI display.
 // Only themes matching the target brightness (dark/light) are included.

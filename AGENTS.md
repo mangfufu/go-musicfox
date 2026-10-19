@@ -161,7 +161,19 @@ type Player interface {
 | AVFoundation | macOS | 原生集成 |
 | MediaPlayer | Windows | WinRT API |
 
-### 事件处理
+### 复古磁带视图
+
+默认 `theme.layout="cassette"` 将原生音乐库置顶，由 `internal/ui/cassette_dashboard.go` 在下方渲染共享播放快照；主界面保持每页 10 项，音乐库提示与筛选输入预留两行，鼠标 seek 按可见进度条计算。`theme.layout="classic"` 恢复原组件组合。磁带布局中搜索/登录输入与按钮从当前主题取色。
+
+新增 Cassette、Midnight Tape、Paper Tape 三套内置主题，F9（`switchTheme`）切换并保存。`internal/cassette/palette.go` 将主题色应用于主界面和 F8 页；浅色主题仍使用深色磁带标签和浅色字。内嵌主题必须使用 `path.Join`，不能使用 Windows 反斜杠路径。`configs.themeStyleSet` 补齐当前 foxful-cli 丢弃的菜单前景色，主面板在框架重建样式后同步修正，避免浅色背景上的菜单文字失去对比度。
+
+`internal/ui/cassette_page.go` 实现独立 `model.Page`，`cassetteView` 操作默认绑定 F8；Esc/F8 返回原主界面。歌曲、进度、音量、模式和队列来自 `Player`，LRC/YRC 与译文来自 `lyric.Service.State()`。仅处理页面相关的播放控制，避免操作原菜单的隐藏选择项。底栏从实际生效的快捷键映射生成。
+
+`internal/cassette` 是无播放副作用的纯渲染包，负责固定尺寸布局、七段计时器、半块字符磁带和歌词/队列窗口。F8 页的 8 FPS `tea.Tick` 链带页面身份与代际校验，重复刷新或缩放不会创建并行计时链，暂停冻结卷轴；主界面复用播放器刷新。小于 80 列或全屏 22 行（主面板 19 行）时隐藏磁带与队列；底部保留状态和操作。
+
+`cmd/cassette-preview` 用明确标记的示例数据输出 ANSI 预览；不能将预览视为线上播放验收。Windows 启动脚本 `Start-Musicfox.ps1` 默认使用 `.local/user` 保存本地配置与登录状态，`-Build` 可使用 `.tools` 中的本地工具链重建。详细说明见 `docs/cassette-view.md`。
+
+### 原界面事件处理
 
 **文件**：`internal/ui/event_handler.go`
 

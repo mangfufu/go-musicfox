@@ -8,6 +8,7 @@ import (
 	"github.com/anhoder/foxful-cli/model"
 	"github.com/anhoder/foxful-cli/style"
 	"github.com/anhoder/foxful-cli/util"
+	"github.com/go-musicfox/go-musicfox/internal/configs"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -55,6 +56,14 @@ func pageSubmitButton(focused bool) string {
 }
 
 func pageButton(text string, focused bool) string {
+	if configs.AppConfig.Theme.Layout == "cassette" {
+		p := cassettePalette()
+		color := p.Secondary
+		if focused {
+			color = p.Accent
+		}
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Background(lipgloss.Color(p.Background)).Bold(focused).Render("[ " + text + " ]")
+	}
 	if focused {
 		return "[ " + util.GetPrimaryFontStyle(false).Render(text) + " ]"
 	}
@@ -68,6 +77,16 @@ func pageInputStyles() textinput.Styles {
 	styles.Focused.Prompt = primary
 	styles.Focused.Suggestion = primary
 	styles.Cursor.Color = util.GetPrimaryColor()
+	if configs.AppConfig.Theme.Layout == "cassette" {
+		p := cassettePalette()
+		base := lipgloss.NewStyle().Foreground(lipgloss.Color(p.Foreground)).Background(lipgloss.Color(p.Background))
+		primary := base.Foreground(lipgloss.Color(p.Accent))
+		placeholder := base.Foreground(lipgloss.Color(p.Secondary))
+		styles.Focused.Text, styles.Focused.Prompt, styles.Focused.Suggestion = primary, primary, primary
+		styles.Blurred.Text, styles.Blurred.Prompt = base, placeholder
+		styles.Focused.Placeholder, styles.Blurred.Placeholder = placeholder, placeholder
+		styles.Cursor.Color = lipgloss.Color(p.Accent)
+	}
 	return styles
 }
 
@@ -84,12 +103,18 @@ func blurPageInput(input *textinput.Model) {
 }
 
 func pageInputView(input textinput.Model, hovered bool) string {
+	if configs.AppConfig.Theme.Layout == "cassette" {
+		input.SetStyles(pageInputStyles())
+	}
 	if !hovered {
 		return input.View()
 	}
 
 	styles := input.Styles()
 	hoverStyle := util.GetPrimaryFontStyle(false)
+	if configs.AppConfig.Theme.Layout == "cassette" {
+		hoverStyle = styles.Focused.Text
+	}
 	styles.Focused.Text = hoverStyle
 	styles.Focused.Prompt = hoverStyle
 	styles.Blurred.Text = hoverStyle
@@ -99,6 +124,9 @@ func pageInputView(input textinput.Model, hovered bool) string {
 }
 
 func pageButtonHoverView(text string) string {
+	if configs.AppConfig.Theme.Layout == "cassette" {
+		return pageButton(text, true)
+	}
 	return "[ " + util.GetPrimaryFontStyle(true).Underline(true).Render(text) + " ]"
 }
 

@@ -60,6 +60,9 @@ func newBaseMenu(netease *Netease) baseMenu {
 }
 
 func (e *baseMenu) HelpHints() []model.HelpHint {
+	if configs.AppConfig.Theme.Layout == "cassette" {
+		return []model.HelpHint{{Key: "♪", Desc: "MUSIC LIBRARY / 音乐库"}}
+	}
 	return nil
 }
 

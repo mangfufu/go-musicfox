@@ -41,7 +41,7 @@ func assertThemeColor(t *testing.T, got, want color.Color, label string) {
 	}
 }
 
-func TestBuiltinThemesStatusBarFontsMatchDefault(t *testing.T) {
+func TestBuiltinThemesStatusBarFontsUseConfiguredOrDefaultColors(t *testing.T) {
 	themes := loadBuiltinThemes()
 	defaultTheme, ok := themes["Default"]
 	if !ok {
@@ -63,8 +63,15 @@ func TestBuiltinThemesStatusBarFontsMatchDefault(t *testing.T) {
 			}
 			want := style.NewStyleSet(variant.defaultV.toTheme())
 			got := style.NewStyleSet(actual.toTheme())
-			assertThemeColor(t, got.StatusBarBreadcrumb.GetForeground(), want.StatusBarBreadcrumb.GetForeground(), themeName+" "+variant.name+" breadcrumb")
-			assertThemeColor(t, got.StatusBarTime.GetForeground(), want.StatusBarTime.GetForeground(), themeName+" "+variant.name+" time")
+			breadcrumb, clock := want.StatusBarBreadcrumb.GetForeground(), want.StatusBarTime.GetForeground()
+			if actual.StatusBar.Breadcrumb != "" {
+				breadcrumb = parseColor(actual.StatusBar.Breadcrumb)
+			}
+			if actual.StatusBar.Time != "" {
+				clock = parseColor(actual.StatusBar.Time)
+			}
+			assertThemeColor(t, got.StatusBarBreadcrumb.GetForeground(), breadcrumb, themeName+" "+variant.name+" breadcrumb")
+			assertThemeColor(t, got.StatusBarTime.GetForeground(), clock, themeName+" "+variant.name+" time")
 		}
 	}
 }
@@ -88,6 +95,23 @@ func TestTransparentThemeConfiguresPrimaryBreadcrumbLabel(t *testing.T) {
 		assertThemeColor(t, styles.StatusBarBreadcrumbHover.GetForeground(), parseColor(variant.value.Primary), variant.name+" breadcrumb hover foreground")
 		if _, ok := styles.StatusBarNuggetLabel.GetBackground().(lipgloss.NoColor); !ok {
 			t.Fatalf("%s breadcrumb marker background = %v, want transparent", variant.name, styles.StatusBarNuggetLabel.GetBackground())
+		}
+	}
+}
+
+func TestCassetteThemesLoadFromEmbeddedFilesystem(t *testing.T) {
+	themes := loadBuiltinThemes()
+	for _, name := range []string{"Cassette", "Midnight Tape", "Paper Tape"} {
+		theme, ok := themes[name]
+		if !ok {
+			t.Fatalf("embedded theme %q is missing", name)
+		}
+		for _, v := range []ThemeVariant{theme.Dark, theme.Light} {
+			if v.App.Background == "" || v.App.Background != v.Background || v.Foreground == v.Background {
+				t.Fatalf("theme %q must paint a readable, consistent application background", name)
+			}
+			assertThemeColor(t, style.NewStyleSet(v.toTheme()).AppBackground.GetBackground(), parseColor(v.Background), name)
+			assertThemeColor(t, themeStyleSet(v.toTheme()).MenuItem.GetForeground(), parseColor(v.Foreground), name+" menu foreground")
 		}
 	}
 }

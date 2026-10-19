@@ -11,6 +11,13 @@ type LocalSearchMenu struct {
 	base baseMenu
 }
 
+func (m *LocalSearchMenu) HelpHints() []model.HelpHint {
+	if hints := m.base.HelpHints(); len(hints) > 0 {
+		return hints
+	}
+	return m.LocalSearchMenuImpl.HelpHints()
+}
+
 func NewLocalSearchMenu(netease *Netease) *LocalSearchMenu {
 	return &LocalSearchMenu{
 		base:                newBaseMenu(netease),

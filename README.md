@@ -545,6 +545,11 @@ musicfox upgrade-config
 <summary>
 
 ### 快捷键
+
+本分支默认使用复古磁带主界面：上方浏览音乐库，下方显示磁带、数码计时器、歌词与播放队列。按 **F8** 进入全屏播放页，按 **Esc / F8** 返回，按 **F9** 切换主题。
+新增 **Cassette**（暖黑）、**Midnight Tape**（午夜蓝）、**Paper Tape**（浅色纸感）三套配色，菜单、搜索、登录与播放页保持统一。旧配置可设置 `theme.layout = "cassette"`、`theme.activeTheme = "Cassette"`；设置 `theme.layout = "classic"` 可恢复原布局。
+Windows 可运行 `./Start-Musicfox.ps1`，首次登录与歌单选择仍在原界面完成。
+完整使用、构建与验证说明见 [磁带视图说明](docs/cassette-view.md)。
 </summary>
 
 #### 应用内快捷键
@@ -628,7 +633,8 @@ musicfox upgrade-config
 | `simiSongsOfSelectedSong`           | 与选中歌曲相似的歌曲          | `F`                                             |
 | `actionOfSelected`                  | 对于选中项或当前播放的操作    | `m`                                          |
 | `actionOfPlayingSong`               | 对于当前播放的操作            | `M`                                          |
-| `switchTheme`                       | 切换主题样式                  | *(无，可通过右键菜单触发)*                      |
+| `cassetteView`                      | 打开/关闭复古磁带视图         | `F8`                                           |
+| `switchTheme`                       | 切换主题（自动保存）          | `F9`                                           |
 | `toggleSortOrder`                   | 切换排序顺序（电台/播客列表） | `|`                                          |
 
 注意：

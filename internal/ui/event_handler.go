@@ -58,6 +58,9 @@ func (h *EventHandler) handle(op keybindings.OperateType) (bool, model.Page, tea
 	)
 
 	switch op {
+	case keybindings.OpCassetteView:
+		h.netease.coverRenderer.ClearDisplayed()
+		return true, newCassettePage(h.netease, h), nil
 	case keybindings.OpEnter:
 		return h.enterKeyHandle()
 	case keybindings.OpCurPlaylist:
@@ -406,6 +409,12 @@ func (h *EventHandler) MouseMsgHandle(msg tea.MouseMsg, a *model.App) (stopPropa
 	}
 
 	mouse := msg.Mouse()
+	if configs.AppConfig.Theme.Layout == "cassette" {
+		switch msg.(type) {
+		case tea.MouseClickMsg, tea.MouseMotionMsg:
+			return h.handleCassetteMouse(msg, a)
+		}
+	}
 	switch msg.(type) {
 	case tea.MouseClickMsg:
 		switch mouse.Button {

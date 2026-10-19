@@ -56,6 +56,10 @@ func (cfg *Config) FillToModelOpts(opts *model.Options) {
 
 	opts.DualColumn = cfg.Theme.DoubleColumn
 	opts.MaxMenuStartRow = cfg.Theme.MaxTitleStartRow
+	if cfg.Theme.Layout == "cassette" {
+		opts.MaxMenuStartRow = 1
+		opts.WhetherDisplayTitle = false
+	}
 	opts.AltScreen = cfg.Main.AltScreen
 
 	// 状态栏

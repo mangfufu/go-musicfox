@@ -266,6 +266,9 @@ func (s *SearchPage) enterHandler() (model.Page, tea.Cmd) {
 }
 
 func (s *SearchPage) View(a *model.App) string {
+	if configs.AppConfig.Theme.Layout == "cassette" {
+		s.submitButton = pageSubmitButton(s.index == 1)
+	}
 	var (
 		builder strings.Builder
 		top     int // 距离顶部的行数

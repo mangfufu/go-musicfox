@@ -23,7 +23,9 @@ type ProgressOptions struct {
 
 // ThemeConfig 主题设置
 type ThemeConfig struct {
-	// 活跃主题名称（对应主题文件名中的 name 字段，默认 "Default"）
+	// Layout selects the cassette dashboard or the classic player components.
+	Layout string `koanf:"layout"`
+	// ActiveTheme selects a theme file by name; new installations use Cassette.
 	ActiveTheme string `koanf:"activeTheme"`
 	// Deprecated: migrated to theme files. Kept for backward compatibility.
 	PrimaryColor string `koanf:"primaryColor"`
@@ -183,7 +185,7 @@ func (r *ThemeRegistry) NextStyleSet(darkBackground bool) *style.StyleSet {
 	} else {
 		t = tf.Light.toTheme()
 	}
-	ss := style.NewStyleSet(t)
+	ss := themeStyleSet(t)
 	return &ss
 }
 
@@ -206,8 +208,18 @@ func (r *ThemeRegistry) CurrentStyleSet(darkBackground bool) *style.StyleSet {
 	} else {
 		t = tf.Light.toTheme()
 	}
-	ss := style.NewStyleSet(t)
+	ss := themeStyleSet(t)
 	return &ss
+}
+
+// The current foxful-cli release drops MenuItem.Fg while building its StyleSet.
+// Restore the configured color so light surfaces remain readable on dark terminals.
+func themeStyleSet(t style.Theme) style.StyleSet {
+	ss := style.NewStyleSet(t)
+	if t.MenuItem.Fg != nil {
+		ss.MenuItem = ss.MenuItem.Foreground(t.MenuItem.Fg)
+	}
+	return ss
 }
 
 // CurrentThemePair returns the dark and light variants of the active theme.

@@ -81,11 +81,14 @@ func runPlayer(_ *gcli.Command, _ []string) error {
 			options.Ticker = netease.Player().RenderTicker()
 			options.DynamicRowCount = configs.AppConfig.Theme.DynamicMenuRows
 			options.CenterEverything = configs.AppConfig.Theme.CenterEverything
+			if configs.AppConfig.Theme.Layout == "cassette" {
+				options.DynamicRowCount = false
+			}
 
-		// 状态栏：若配置启用，注入队列位置与音质中间文本
-		if options.StatusBar != nil {
-			options.StatusBar = ui.NewQueueQualityStatusBar(netease.Player())
-		}
+			// 状态栏：若配置启用，注入队列位置与音质中间文本
+			if options.StatusBar != nil {
+				options.StatusBar = ui.NewQueueQualityStatusBar(netease.Player())
+			}
 
 			if options.DynamicRowCount {
 				// BottomHeight 是底部组件的最大预估高度，用于告诉 foxful-cli

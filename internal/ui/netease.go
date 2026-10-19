@@ -118,6 +118,9 @@ func NewNetease(app *model.App) *Netease {
 }
 
 func (n *Netease) Components() []model.Component {
+	if configs.AppConfig.Theme.Layout == "cassette" {
+		return []model.Component{&cassetteDashboard{netease: n}}
+	}
 	var components []model.Component
 	if n.spectrumRenderer.IsEnabled() {
 		components = append(components, n.spectrumRenderer)
@@ -170,6 +173,12 @@ func (n *Netease) ToSearchPage(searchType SearchType) (model.Page, tea.Cmd) {
 
 func (n *Netease) InitHook(_ *model.App) {
 	config := configs.AppConfig
+	if !style.AccessibleMode() {
+		if ss := configs.CurrentThemeRegistry().CurrentStyleSet(style.HasDarkBackground()); ss != nil {
+			style.SetStyleSet(*ss)
+			n.App.SetStyleSet(*ss)
+		}
+	}
 	dataDir := app.DataDir()
 
 	// 注册 TUI 内 toast 回调（此时 App.Run 已启动，program 就绪）

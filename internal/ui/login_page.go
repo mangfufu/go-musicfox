@@ -382,6 +382,11 @@ func (l *LoginPage) Update(msg tea.Msg, a *model.App) (model.Page, tea.Cmd) {
 }
 
 func (l *LoginPage) View(a *model.App) string {
+	if configs.AppConfig.Theme.Layout == "cassette" {
+		l.submitButton = pageSubmitButton(l.index == submitIndex)
+		l.qrLoginButton = pageButton(l.qrButtonTextByStep(), l.index == qrLoginIndex)
+		l.webviewLoginButton = pageButton(model.T(MsgLoginWebviewButton), l.index == webviewLoginIndex)
+	}
 	var (
 		builder  strings.Builder
 		top      int // 距离顶部的行数

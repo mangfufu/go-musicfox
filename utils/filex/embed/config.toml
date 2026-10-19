@@ -236,7 +236,9 @@ neteaseCookie = ""
 [theme]
 # 活跃主题名称（对应主题文件中的 name 字段，默认 "Default"）
 # 主题文件存放于 embed/themes/（内置）和 ~/.config/go-musicfox/themes/（用户自定义）
-activeTheme = "Default"
+activeTheme = "Cassette"
+# 主界面布局：cassette（磁带面板）或 classic（原版）
+layout = "cassette"
 # 是否在界面顶部显示标题
 showTitle = true
 # 菜单加载时显示的提示文字
