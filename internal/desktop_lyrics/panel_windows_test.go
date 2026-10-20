@@ -16,7 +16,6 @@ import (
 
 	"github.com/go-musicfox/go-musicfox/internal/configs"
 	"github.com/go-musicfox/go-musicfox/internal/storage"
-	"golang.org/x/sys/windows"
 )
 
 func nativeLyricDPI() func() {
@@ -93,126 +92,83 @@ func TestVerticalLyricsKeepClustersAndTranslation(t *testing.T) {
 	}
 }
 
-func TestWindowsLyricsNativePanelControls(t *testing.T) {
+func TestWindowsLyricsTerminalBridgeAndAlignment(t *testing.T) {
 	if os.Getenv("MUSICFOX_NATIVE_LYRICS_TEST") != "1" {
 		t.Skip("requires an interactive Windows desktop")
 	}
 	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[main.lyric.desktopLyrics]\nenable = true\nfontSize = 36\ndraggable = true\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("[main.lyric.desktopLyrics]\nenable = true\nfontSize = 36\ndraggable = false\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	controller := NewController(configs.DesktopLyricsConfig{Enable: true, FontSize: 36, Draggable: true, TextColor: "#E5C1B3", ShadowColor: "#101010"})
-	if controller == nil {
-		t.Fatal("create controller")
-	}
-	c := controller.(*windowsController)
-	t.Cleanup(c.Close)
+	c := NewController(configs.DesktopLyricsConfig{Enable: true, FontSize: 36, TextColor: "#FFFFFF", ShadowColor: "#101010", WindowAlpha: 1}).(*windowsController)
+	defer c.Close()
 	c.mu.Lock()
 	c.configPath = path
-	hwnd := c.hwnd
 	c.mu.Unlock()
-	c.Update(LyricLine{Text: "月光落在窗前\n风声经过耳边"}, LyricLine{Text: "下一句仍在身边"}, 0, 0, true)
+	c.Update(LyricLine{Text: "一二三四五六七八九十"}, LyricLine{Text: "短句"}, 0, 0, true)
 	c.Show()
-	nativeLyricMessage(t, hwnd, dlRefresh, 0, 0)
-	nativeLyricMessage(t, hwnd, 0x007b, 0, ^uintptr(0))
-	panel := waitNativeSettingsPanel(t, hwnd)
-	control := func(id uintptr) uintptr {
-		h, _, _ := dlUser.NewProc("GetDlgItem").Call(panel, id)
-		if h == 0 {
-			t.Fatalf("missing control %d", id)
+	nativeLyricMessage(t, c.hwnd, dlRefresh, 0, 0)
+	var starts []int
+	var origin dlRect
+	for index, align := range []string{"left", "center", "right"} {
+		cfg, err := c.EditSettings(SettingsChange{Key: "textAlign", Value: align})
+		if err != nil || cfg.TextAlign != align {
+			t.Fatalf("alignment: %+v %v", cfg, err)
 		}
-		return h
-	}
-	var label [128]uint16
-	dlUser.NewProc("GetWindowTextW").Call(control(dlLock), uintptr(unsafe.Pointer(&label[0])), 128)
-	if windows.UTF16ToString(label[:]) != "锁定位置" {
-		t.Fatal("lock label contains extra explanation")
-	}
-	// Exercise actual native button activation, not the settings dispatcher directly.
-	for _, id := range []uintptr{dlVertical, dlLarger, dlBold, dlLock} {
-		nativeLyricMessage(t, control(id), 0x00f5, 0, 0)
-	}
-	frame := captureLyricFrame(t, hwnd)
-	c.mu.Lock()
-	cfg := c.cfg
-	c.mu.Unlock()
-	if !cfg.Vertical || cfg.FontSize != 48 || !cfg.FontBold || cfg.Draggable {
-		t.Fatalf("panel controls did not apply: %+v", cfg)
-	}
-	if frame.height <= frame.width {
-		t.Fatalf("vertical layout is not column-shaped: %dx%d", frame.width, frame.height)
-	}
-	bindings := configs.EffectiveKeybindings
-	t.Cleanup(func() { configs.EffectiveKeybindings = bindings })
-	reloaded, err := configs.NewConfigFromTomlFile(path)
-	if err != nil || !reloaded.Main.Lyric.DesktopLyrics.Vertical {
-		t.Fatalf("vertical setting did not persist: %v", err)
-	}
-	// Presets change appearance without moving or unlocking the lyrics.
-	var beforePreset dlRect
-	dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&beforePreset)))
-	for _, index := range []int{1, 2, 3, 4, 0} {
-		nativeLyricMessage(t, control(dlPresetBase+uintptr(index)), 0x00f5, 0, 0)
-		c.mu.Lock()
-		applied := c.cfg
-		c.mu.Unlock()
-		if !lyricStylePresets[index].matches(applied) || !applied.Vertical || applied.Draggable || applied.OneLineMode != cfg.OneLineMode {
-			t.Fatalf("preset %d changed layout or did not apply: %+v", index, applied)
+		frame := captureLyricFrame(t, c.hwnd)
+		first := int(frame.width)
+		for y := int(frame.height) / 2; y < int(frame.height); y++ {
+			for x := 0; x < int(frame.width); x++ {
+				if frame.pixels[y*int(frame.width)+x]>>24 > 2 && x < first {
+					first = x
+				}
+			}
 		}
-		var afterPreset dlRect
-		dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&afterPreset)))
-		if afterPreset.left != beforePreset.left || afterPreset.top != beforePreset.top {
-			t.Fatal("preset moved the locked lyrics")
+		starts = append(starts, first)
+		var bounds dlRect
+		dlUser.NewProc("GetWindowRect").Call(c.hwnd, uintptr(unsafe.Pointer(&bounds)))
+		if index == 0 {
+			origin = bounds
+		} else if bounds.left != origin.left || bounds.top != origin.top {
+			t.Fatal("text alignment moved the locked window")
+		}
+		if folder := os.Getenv("MUSICFOX_LYRICS_ARTIFACT_DIR"); folder != "" {
+			saveLyricTestPNG(t, frame, filepath.Join(folder, "lyrics-"+align+".png"), true)
 		}
 	}
-	reloaded, err = configs.NewConfigFromTomlFile(path)
-	if err != nil || !lyricStylePresets[0].matches(reloaded.Main.Lyric.DesktopLyrics) {
-		t.Fatalf("default preset did not persist: %v", err)
+	if !(starts[0] < starts[1] && starts[1] < starts[2]) {
+		t.Fatalf("native text did not align: %v", starts)
 	}
-	custom := reloaded.Main.Lyric.DesktopLyrics
-	custom.FontBold = !custom.FontBold
-	if lyricStylePresets[0].matches(custom) {
-		t.Fatal("manual edits still select the default preset")
+	cfg, err := c.EditSettings(SettingsChange{Key: "textColor", Value: "#A9DCF5"})
+	if err != nil || cfg.TextColor != "#A9DCF5" || len(cfg.RecentColors) == 0 || cfg.RecentColors[0] != "#A9DCF5" {
+		t.Fatalf("color bridge: %+v %v", cfg, err)
 	}
-	frame = captureLyricFrame(t, hwnd)
-	if folder := os.Getenv("MUSICFOX_LYRICS_ARTIFACT_DIR"); folder != "" {
-		saveLyricTestPNG(t, frame, filepath.Join(folder, "lyrics-vertical.png"), true)
-		panelFrame, err := newLyricSurface(dlPanelWidth, dlPanelHeight)
-		if err != nil {
+	c.Hide()
+	if _, err = c.EditSettings(SettingsChange{Key: "fontSize", Step: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if c.IsVisible() {
+		t.Fatal("editing enabled hidden lyrics")
+	}
+	for _, change := range []SettingsChange{{Key: "vertical"}, {Key: "fontBold"}, {Key: "draggable"}, {Key: "windowAlpha", Step: -1}, {Key: "preset", Value: "2"}} {
+		if _, err = c.EditSettings(change); err != nil {
 			t.Fatal(err)
 		}
-		defer panelFrame.close()
-		if ok, _, err := dlUser.NewProc("PrintWindow").Call(panel, panelFrame.dc, 1); ok == 0 {
-			t.Fatalf("capture settings: %v", err)
-		}
-		dlGDI.NewProc("GdiFlush").Call()
-		saveLyricTestPNG(t, panelFrame, filepath.Join(folder, "lyrics-settings.png"), false)
 	}
-	nativeLyricMessage(t, control(dlHorizontal), 0x00f5, 0, 0)
-	frame = captureLyricFrame(t, hwnd)
-	if frame.width <= frame.height {
-		t.Fatal("horizontal layout was not restored")
+	bindings := configs.EffectiveKeybindings
+	defer func() { configs.EffectiveKeybindings = bindings }()
+	loaded, err := configs.NewConfigFromTomlFile(path)
+	if err != nil || loaded.Main.Lyric.DesktopLyrics.TextAlign != "right" || !loaded.Main.Lyric.DesktopLyrics.Vertical {
+		t.Fatalf("settings reload: %v", err)
 	}
-	for i := 0; i < 3; i++ {
-		nativeLyricMessage(t, control(dlSmaller), 0x00f5, 0, 0)
+	before := c.Settings()
+	if _, err = c.EditSettings(SettingsChange{Key: "textAlign", Value: "invalid"}); err == nil {
+		t.Fatal("invalid alignment accepted")
 	}
-	nativeLyricMessage(t, control(dlSmaller), 0x00f5, 0, 0)
-	c.mu.Lock()
-	size := c.cfg.FontSize
-	c.mu.Unlock()
-	if size != 12 {
-		t.Fatal("minimum font size wrapped back to the default")
-	}
-	nativeLyricMessage(t, control(dlPanelDone), 0x00f5, 0, 0)
-	if alive, _, _ := dlUser.NewProc("IsWindow").Call(panel); alive != 0 {
-		t.Fatal("Done did not close the panel")
-	}
-	c.Close()
-	if alive, _, _ := dlUser.NewProc("IsWindow").Call(hwnd); alive != 0 {
-		t.Fatal("lyric window leaked")
+	if c.Settings().TextAlign != before.TextAlign {
+		t.Fatal("invalid edit changed settings")
 	}
 }
-
 func TestWindowsLyricsNativePositionRestart(t *testing.T) {
 	if os.Getenv("MUSICFOX_NATIVE_LYRICS_TEST") != "1" {
 		t.Skip("requires an interactive Windows desktop")

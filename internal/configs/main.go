@@ -228,6 +228,9 @@ type DesktopLyricsConfig struct {
 	FontItalic bool `koanf:"fontItalic"`
 	// Vertical columns for Windows desktop lyrics.
 	Vertical bool `koanf:"vertical"`
+	// Horizontal text alignment and recently selected colors (Windows).
+	TextAlign    string   `koanf:"textAlign"`
+	RecentColors []string `koanf:"recentColors"`
 	// 文字颜色（十六进制）
 	TextColor string `koanf:"textColor"`
 	// 文字阴影颜色（十六进制）

@@ -173,6 +173,8 @@ type Player interface {
 
 `cmd/cassette-preview` 用明确标记的示例数据输出 ANSI 预览；不能将预览视为线上播放验收。Windows 启动脚本 `Start-Musicfox.ps1` 默认使用 `.local/user` 保存本地配置与登录状态，`-Build` 可使用 `.tools` 中的本地工具链重建。详细说明见 `docs/cassette-view.md`。
 
+内嵌配置 `utils/filex/embed/config.toml` 默认设置 `main.lyric.desktopLyrics.enable=true`。`toggleDesktopLyrics` 默认 F10，主界面、F8 页和终端右键菜单均可即时开关；保存成功后才改变状态，失败保留原状态。`Netease.desktopLyricsMu` 串行化开关、控制器懒创建、播放刷新和退出；`desktopLyricsDisabled` 从启动配置初始化，关闭后阻止后续播放事件重新显示。已有 `false` 可在运行中开启，无需重启；终端设置页在关闭状态也可打开，不改变开关。
+
 `Start-Musicfox.ps1 -Pixel` 调用 `Setup-PixelFont.ps1`，为当前 Windows 用户注册 `assets/fonts/fusion-pixel` 中保留 OFL 许可证的字体，并写入独立 Windows Terminal fragment，再打开像素字体窗口。字体、字号和抗锯齿由终端配置控制；不修改其他用户配置。更新检查比较 `types.UpstreamBaseVersion` 与上游 release，默认显示版本带 `+cassette`；合并包含新上游发布版的源码时必须同步提升基线，避免误报和遗漏更新。
 
 Windows 双击入口 `Start-Musicfox.cmd` 使用脚本所在目录调用 PowerShell 像素启动器，并在启动失败时暂停保留报错；专用终端配置使用 `closeOnExit="graceful"`，播放器非零退出时保留窗口。
@@ -183,12 +185,13 @@ Windows 原生桌面歌词由 `internal/desktop_lyrics/desktop_lyrics_windows.go
 
 内置菜单图标、帮助星号、通知图标/关闭按钮、磁带选中箭头与音量减号均使用 Fusion Pixel 字库支持的字符。foxful-cli 默认主题的 Powerline 分隔符置空，避免切换其他主题或 classic 布局后再次缺字；glamour 内置 Markdown 样式的任务勾选和定义箭头也改为普通字符。`hack/check_pixel_glyphs.py` 使用 fonttools 读取实际 OTF cmap，扫描应用和终端渲染依赖的内置字符串；只豁免输入别名和歌词解析中剔除的 BOM，不改写网络歌曲/歌词内容。更新 vendor 后需保留上述兼容修改并重跑检查。
 
-桌面歌词设置由 `internal/desktop_lyrics/panel_windows.go` 提供独立像素风 Win32 面板。歌词窗口处理 `WM_NCRBUTTONUP` / `WM_CONTEXTMENU` 直接打开面板，锁定和未锁定都有效；歌词上不绘制设置按钮。终端操作 `desktopLyricsSettings`（默认 F10）及右键菜单通过可选 `SettingsOpener.OpenSettings()` 投递 `WM_APP` 消息打开同一个面板，不切换页面，不暂停 F8 页刷新。面板为单实例，重复打开前置已有窗口；原生 owner-draw 按钮保留键盘导航与控件名称，消息循环通过 `IsDialogMessageW` 支持 Tab、空格和 Esc。关闭面板只释放自身资源，退出播放器时关闭全部窗口；所有 HWND/GDI 操作均在歌词窗口线程。
+桌面歌词设置由 `internal/ui/desktop_lyrics_page.go` 提供终端独立页面，原 Win32 设置面板已移除。终端右键菜单或自定义 `desktopLyricsSettings` 快捷键进入，Esc 返回原页面并恢复 F8 页动画；F10 仍为歌词开关。支持键盘与鼠标选择、窄屏滚动、常用色板、最近颜色和系统字体/颜色选择框。
 
-`settings_windows.go` 负责字号、字体、粗斜体、颜色、不透明度、单句模式、横竖排与位置锁定的即时更新。 `lyricStylePresets` 提供默认、琥珀像素、冰蓝像素、清晰雅黑、书页宋体五套外观，复用同一保存流程，仅修改字体/字号/字形/颜色/透明度，保留位置、锁定、方向和单句模式；预设选中状态由实际配置匹配得出，不存额外预设名称，手动调整后可显示自定义。面板右侧展示搭配按钮及说明，`dlPanelWidth` / `dlPanelHeight` 与原生截图测试共用尺寸。调用 `configs.SetTOMLValues` 成功后才替换字体和配置；写文件失败保留原设置。批量编辑与 `SetTOMLValue` 共用互斥锁，避免主题和歌词设置并发覆盖。`vertical`、`fontBold`、`fontItalic` 仅 Windows 生效。竖排按 grapheme cluster 分行，长句分列，原文/译文/下一句保持各自列与颜色；受屏幕宽高约束，超限以省略号结束。锁定后保持左上角，`DesktopLyricsPosition.WindowsOrigin` 保存比例原点，兼容原有中心比例数据；重启字号/方向变化不会重新按文字中心偏移。
+`desktop_lyrics.SettingsEditor` 通过 `settings_bridge_windows.go` 的有界请求队列与 `WM_APP` 把编辑串行派发到歌词窗口线程，确认保存成功后再更新字体和配置，关闭时用 `done` 结束等待。终端命令异步等待返回，系统选择框期间页面禁止重复提交。右键桌面歌词通过回调调用 vendor `model.App.RequestPage`，在终端事件循环中创建页面，避免跨线程操作页面；升级 foxful-cli vendor 时需保留这一桥接。
 
-终端测试覆盖 F10/右键入口与页面保留；原生测试覆盖右键与跨线程打开、透明留白命中、真实按钮、窗口生命周期、设置保存与隔离数据库的重启位置。通过 `MUSICFOX_LYRICS_ARTIFACT_DIR` 可导出实际 Win32 面板与歌词表面；捕获线程须使用与窗口相同的 DPI 感知上下文，防止系统缩放裁剪。字库检查脚本覆盖面板字符串。
+`settings_windows.go` 保留原生选择框、外观预设及配置保存；`textAlign` 支持横排文字 `left/center/right`，原文、译文和下一句统一对齐，竖排保持字格居中；`recentColors` 保存最近 8 个有效颜色。样式编辑不改变 F10 开关状态。窗口位置、锁定和大小适配沿用原有原生实现，文字对齐不改变窗口在屏幕上的位置。
 
+终端测试覆盖页面入口/返回、异步编辑、色板鼠标命中、失败回滚与小窗口。原生测试通过实际 GDI 像素检查三种对齐，验证跨线程编辑、右键请求终端页面、设置保存/重新加载、系统字体/颜色选择框取消、隐藏状态保持及窗口生命周期。`MUSICFOX_LYRICS_ARTIFACT_DIR` 可导出实际歌词表面，字库检查脚本覆盖新增终端界面。
 ### 原界面事件处理
 
 **文件**：`internal/ui/event_handler.go`

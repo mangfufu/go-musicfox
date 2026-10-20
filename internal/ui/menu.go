@@ -158,6 +158,9 @@ func runContextAction(actions []ActionItem, i int, a *model.App) (model.Page, te
 func handleGenericContextAction(n *Netease, a *model.App, id string) (model.Page, tea.Cmd) {
 	main := a.MustMain()
 	switch id {
+	case "generic:toggleDesktopLyrics":
+		_, page, cmd := NewEventHandler(n).handle(keybindings.OpToggleDesktopLyrics)
+		return page, cmd
 	case "generic:desktopLyricsSettings":
 		_, page, cmd := NewEventHandler(n).handle(keybindings.OpDesktopLyricsSettings)
 		return page, cmd

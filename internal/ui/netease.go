@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -70,7 +71,9 @@ type Netease struct {
 	themeNotifID    model.NotificationID
 	themeNotifTimer *time.Timer
 
-	desktopLyrics desktop_lyrics.Controller
+	desktopLyrics         desktop_lyrics.Controller
+	desktopLyricsMu       sync.Mutex
+	desktopLyricsDisabled bool
 }
 
 func NewNetease(app *model.App) *Netease {
@@ -96,6 +99,7 @@ func NewNetease(app *model.App) *Netease {
 	n.lyricService.EnableYRC(true) // Enable word-by-word lyrics
 
 	// Initialize desktop lyrics
+	n.desktopLyricsDisabled = !configs.AppConfig.Main.Lyric.DesktopLyrics.Enable
 	n.desktopLyrics = desktop_lyrics.NewController(configs.AppConfig.Main.Lyric.DesktopLyrics)
 
 	n.player = NewPlayer(n, n.lyricService)
@@ -110,6 +114,7 @@ func NewNetease(app *model.App) *Netease {
 	n.login = NewLoginPage(n)
 	n.search = NewSearchPage(n)
 	n.App = app
+	n.bindDesktopLyricsSettings()
 
 	n.shareSvc = composer.NewShareService()
 	n.shareSvc.RegisterTemplates(configs.AppConfig.Share)
@@ -445,14 +450,14 @@ func (n *Netease) InitHook(_ *model.App) {
 				"debug", configs.AppConfig.Main.Debug,
 				"seenVersion", seen.Version,
 			)
-		if shouldShow {
-			if !configs.AppConfig.Main.Debug {
-				if err := table.SetByKVModel(storage.ChangelogSeen{}, storage.ChangelogSeen{Version: types.AppVersion}); err != nil {
-					slog.Error("changelog: failed to persist seen version", slogx.Error(err))
-				} else {
-					slog.Debug("changelog: persisted seen version", "version", types.AppVersion)
+			if shouldShow {
+				if !configs.AppConfig.Main.Debug {
+					if err := table.SetByKVModel(storage.ChangelogSeen{}, storage.ChangelogSeen{Version: types.AppVersion}); err != nil {
+						slog.Error("changelog: failed to persist seen version", slogx.Error(err))
+					} else {
+						slog.Debug("changelog: persisted seen version", "version", types.AppVersion)
+					}
 				}
-			}
 				app := n.App
 				slog.Debug("changelog: scheduling AfterFunc", "hasApp", app != nil)
 				time.AfterFunc(max(configs.AppConfig.Startup.ToModel().LoadingDuration, time.Second)-750*time.Millisecond, func() {
@@ -468,9 +473,13 @@ func (n *Netease) CloseHook(_ *model.App) {
 	_ = n.player.Close()
 	n.lastfm.Close()
 
+	n.desktopLyricsMu.Lock()
 	if n.desktopLyrics != nil {
 		n.desktopLyrics.Close()
+		n.desktopLyrics = nil
 	}
+	n.desktopLyricsDisabled = true
+	n.desktopLyricsMu.Unlock()
 
 	if n.coverRenderer != nil {
 		n.coverRenderer.Close()
@@ -485,6 +494,8 @@ func (n *Netease) Player() *Player {
 
 // DesktopLyrics returns the desktop lyrics controller.
 func (n *Netease) DesktopLyrics() desktop_lyrics.Controller {
+	n.desktopLyricsMu.Lock()
+	defer n.desktopLyricsMu.Unlock()
 	return n.desktopLyrics
 }
 
@@ -492,7 +503,7 @@ func (n *Netease) DesktopLyrics() desktop_lyrics.Controller {
 // Returns the current line, the next line (with word-level data when YRC is available),
 // and the current index.
 func (n *Netease) GetDesktopLyricsLines() (curLine, nextLine desktop_lyrics.LyricLine, currentIndex int) {
-	if n.desktopLyrics == nil || n.lyricService == nil {
+	if n.lyricService == nil {
 		return desktop_lyrics.LyricLine{}, desktop_lyrics.LyricLine{}, -1
 	}
 

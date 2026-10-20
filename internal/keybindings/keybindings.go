@@ -120,6 +120,7 @@ const (
 	OpSwitchTheme
 	OpCassetteView
 	OpDesktopLyricsSettings
+	OpToggleDesktopLyrics
 )
 
 var opNameToOperateMap = make(map[string]OperateType)
@@ -202,6 +203,7 @@ var keyBindingsRegistry = map[OperateType]OperationInfo{
 	OpSwitchTheme:           {name: "switchTheme", desc: "切换主题样式"},
 	OpCassetteView:          {name: "cassetteView", desc: "打开/关闭复古磁带视图"},
 	OpDesktopLyricsSettings: {name: "desktopLyricsSettings", desc: "桌面歌词设置"},
+	OpToggleDesktopLyrics:   {name: "toggleDesktopLyrics", desc: "开启/关闭桌面歌词"},
 }
 
 // 默认操作 -> 快捷键数组映射
@@ -270,9 +272,9 @@ var defaultOtherOperateToKeys = map[OperateType][]string{
 	OpActionOfPlayingSong: {"M"},
 	OpToggleSortOrder:     {"|"},
 
-	OpSwitchTheme:           {"f9"},
-	OpCassetteView:          {"f8"},
-	OpDesktopLyricsSettings: {"f10"},
+	OpSwitchTheme:         {"f9"},
+	OpCassetteView:        {"f8"},
+	OpToggleDesktopLyrics: {"f10"},
 }
 
 var userOperateToKeys map[OperateType][]string

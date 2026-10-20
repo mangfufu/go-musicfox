@@ -5,6 +5,8 @@ package desktop_lyrics
 import (
 	"fmt"
 	"math"
+	"reflect"
+	"slices"
 	"strings"
 	"unsafe"
 
@@ -26,7 +28,6 @@ const (
 	dlHorizontal    = 109
 	dlSmaller       = 110
 	dlLarger        = 111
-	dlPanelDone     = 112
 	dlFontBase      = 400
 	dlOpacityBase   = 600
 	dlPresetBase    = 800
@@ -62,6 +63,9 @@ func (p lyricStylePreset) matches(cfg configs.DesktopLyricsConfig) bool {
 }
 
 func normalizeLyricSettings(cfg configs.DesktopLyricsConfig) configs.DesktopLyricsConfig {
+	if cfg.TextAlign != "left" && cfg.TextAlign != "right" {
+		cfg.TextAlign = "center"
+	}
 	if cfg.FontName == "" {
 		cfg.FontName = pixelfont.Name
 	}
@@ -132,7 +136,7 @@ func (c *windowsController) settingsCommand(hwnd, command uintptr) error {
 		next.WindowAlpha = float64(command-dlOpacityBase) / 100
 	case command == dlChooseFont:
 		var ok bool
-		next, ok = c.chooseFont(c.settingsOwner(hwnd))
+		next, ok = c.chooseFont(hwnd)
 		if !ok {
 			return nil
 		}
@@ -141,7 +145,7 @@ func (c *windowsController) settingsCommand(hwnd, command uintptr) error {
 		if command == dlShadowColor {
 			color = next.ShadowColor
 		}
-		selected, ok := chooseLyricColor(c.settingsOwner(hwnd), color)
+		selected, ok := chooseLyricColor(hwnd, color)
 		if !ok {
 			return nil
 		}
@@ -174,8 +178,10 @@ func desktopSettingUpdates(before, after configs.DesktopLyricsConfig) []configs.
 		{"windowAlpha", before.WindowAlpha, after.WindowAlpha}, {"draggable", before.Draggable, after.Draggable},
 		{"oneLineMode", before.OneLineMode, after.OneLineMode},
 		{"vertical", before.Vertical, after.Vertical},
+		{"textAlign", before.TextAlign, after.TextAlign},
+		{"recentColors", before.RecentColors, after.RecentColors},
 	} {
-		if item.old != item.next {
+		if !reflect.DeepEqual(item.old, item.next) {
 			updates = append(updates, configs.TOMLUpdate{KeyPath: []string{"main", "lyric", "desktopLyrics", item.key}, Value: item.next})
 		}
 	}
@@ -183,6 +189,12 @@ func desktopSettingUpdates(before, after configs.DesktopLyricsConfig) []configs.
 }
 
 func (c *windowsController) applySettings(hwnd uintptr, next configs.DesktopLyricsConfig) error {
+	next.RecentColors = slices.Clone(c.cfg.RecentColors)
+	for _, pair := range [][2]string{{c.cfg.TextColor, next.TextColor}, {c.cfg.ShadowColor, next.ShadowColor}} {
+		if pair[0] != pair[1] {
+			next.RecentColors = rememberLyricColor(next.RecentColors, pair[1])
+		}
+	}
 	updates := desktopSettingUpdates(c.cfg, next)
 	if len(updates) == 0 {
 		return nil
@@ -207,9 +219,6 @@ func (c *windowsController) applySettings(hwnd uintptr, next configs.DesktopLyri
 	c.cfg, c.font, c.fontSize = next, font, int32(next.FontSize)
 	c.mu.Unlock()
 	dlGDI.NewProc("DeleteObject").Call(oldFont)
-	if c.panel != nil {
-		c.panel.refresh()
-	}
 	if err := c.renderLyrics(hwnd); err != nil {
 		return err
 	}

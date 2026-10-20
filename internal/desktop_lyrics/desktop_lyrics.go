@@ -43,9 +43,17 @@ type Controller interface {
 	Close()
 }
 
-// SettingsOpener exposes the native settings panel to terminal shortcuts.
-type SettingsOpener interface {
-	OpenSettings()
+// SettingsEditor marshals edits and native chooser dialogs onto the window thread.
+type SettingsEditor interface {
+	Settings() configs.DesktopLyricsConfig
+	EditSettings(SettingsChange) (configs.DesktopLyricsConfig, error)
+	SetSettingsHandler(func())
+}
+
+type SettingsChange struct {
+	Key   string
+	Value string
+	Step  int
 }
 
 // NewController creates a platform-specific desktop lyrics controller.

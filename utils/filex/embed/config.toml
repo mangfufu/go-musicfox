@@ -167,8 +167,8 @@ tmuxPassthrough = false
 
 # 桌面歌词设置（macOS / Windows；Windows 为透明像素歌词，频谱等高级效果仅 macOS）
 [main.lyric.desktopLyrics]
-# 是否启用桌面歌词
-enable = false
+# 是否启用桌面歌词（默认开启）
+enable = true
 # X 位置系数（0.0-1.0，0.5 表示居中，0.0 最左，1.0 最右）
 xPositionFactor = 0.5
 # Y 位置系数（0.0-1.0，0.0 底部，1.0 顶部，默认 0.5 居中）
@@ -182,6 +182,10 @@ fontBold = false
 fontItalic = false
 # Vertical columns for Windows desktop lyrics
 vertical = false
+# 横排歌词文字对齐：left / center / right（Windows）
+textAlign = "center"
+# 最近使用的文字/描边颜色
+recentColors = []
 # 文字颜色（十六进制）
 textColor = "#FFFFFF"
 # 文字阴影颜色（十六进制）

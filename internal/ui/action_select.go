@@ -245,6 +245,7 @@ func genericContextMenuItems() []model.ContextMenuItem {
 	return []model.ContextMenuItem{
 		{ID: "generic:refresh", Label: iconRefresh + "刷新当前列表"},
 		{ID: "generic:switchTheme", Label: iconTune + "切换主题"},
+		{ID: "generic:toggleDesktopLyrics", Label: iconTune + "开启/关闭桌面歌词"},
 		{ID: "generic:desktopLyricsSettings", Label: iconTune + "桌面歌词设置"},
 	}
 }

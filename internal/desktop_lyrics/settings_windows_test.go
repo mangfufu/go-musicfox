@@ -15,79 +15,28 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func waitNativeSettingsPanel(t *testing.T, hwnd uintptr) uintptr {
-	t.Helper()
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		panel, _, _ := dlUser.NewProc("GetWindow").Call(hwnd, 6) // GW_ENABLEDPOPUP
-		if panel != 0 && panel != hwnd {
-			return panel
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("settings panel did not open")
-	return 0
-}
-
-func TestWindowsLyricsNativeContextPanel(t *testing.T) {
+func TestWindowsLyricsNativeContextRequestsTerminal(t *testing.T) {
 	if os.Getenv("MUSICFOX_NATIVE_LYRICS_TEST") != "1" {
 		t.Skip("requires an interactive Windows desktop")
 	}
 	for _, draggable := range []bool{true, false} {
-		name := "locked"
-		if draggable {
-			name = "draggable"
+		c := NewController(configs.DesktopLyricsConfig{Enable: true, FontSize: 36, Draggable: draggable}).(*windowsController)
+		requests := make(chan struct{}, 4)
+		c.SetSettingsHandler(func() { requests <- struct{}{} })
+		for _, message := range []uintptr{0x007b, 0x00a5, dlOpenSettings} {
+			nativeLyricMessage(t, c.hwnd, message, 0, 0)
+			select {
+			case <-requests:
+			case <-time.After(time.Second):
+				t.Fatal("right click did not request terminal settings")
+			}
 		}
-		t.Run(name, func(t *testing.T) {
-			restore := nativeLyricDPI()
-			defer restore()
-			controller := NewController(configs.DesktopLyricsConfig{Enable: true, FontSize: 36, Draggable: draggable})
-			if controller == nil {
-				t.Fatal("native controller initialization failed")
-			}
-			c := controller.(*windowsController)
-			t.Cleanup(c.Close)
-			hwnd := c.hwnd
-			c.Update(LyricLine{Text: "右键设置"}, LyricLine{}, 0, 0, true)
-			c.Show()
-			var result uintptr
-			dlUser.NewProc("SendMessageTimeoutW").Call(hwnd, dlRefresh, 0, 0, 2, 3000, uintptr(unsafe.Pointer(&result)))
-			dlUser.NewProc("UpdateWindow").Call(hwnd)
-			var bounds dlRect
-			dlUser.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&bounds)))
-			// The padded, visually transparent corners must now accept clicks.
-			for _, point := range []dlPoint{{bounds.left + 4, bounds.top + 4}, {bounds.right - 4, bounds.bottom - 4}} {
-				packed := uintptr(uint64(uint32(point.x)) | uint64(uint32(point.y))<<32)
-				if target, _, _ := dlUser.NewProc("WindowFromPoint").Call(packed); target != hwnd {
-					t.Fatalf("padded lyric region is click-through: %#x, want %#x", target, hwnd)
-				}
-			}
-			message, hit, point := uintptr(0x0205), uintptr(0), dlPoint{32, 40}
-			if draggable {
-				message, hit, point = 0x00a5, 2, dlPoint{bounds.left + 32, bounds.top + 40}
-			}
-			position := uintptr(uint32(uint16(point.x)) | uint32(uint16(point.y))<<16)
-			dlUser.NewProc("PostMessageW").Call(hwnd, message-1, hit, position)
-			dlUser.NewProc("PostMessageW").Call(hwnd, message, hit, position)
-			panel := waitNativeSettingsPanel(t, hwnd)
-			dlUser.NewProc("SendMessageTimeoutW").Call(panel, 0x0010, 0, 0, 2, 3000, uintptr(unsafe.Pointer(&result)))
-			if alive, _, _ := dlUser.NewProc("IsWindow").Call(hwnd); alive == 0 {
-				t.Fatal("closing settings destroyed the lyrics")
-			}
-			// The terminal shortcut opens the same native panel without a lyric button.
-			c.OpenSettings()
-			panel = waitNativeSettingsPanel(t, hwnd)
-			dlUser.NewProc("PostMessageW").Call(panel, 0x0100, 0x1b, 0) // Esc via the dialog message loop.
-			for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-				if alive, _, _ := dlUser.NewProc("IsWindow").Call(panel); alive == 0 {
-					return
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
-			t.Fatal("Esc did not close the settings panel")
-		})
+		if popup, _, _ := dlUser.NewProc("GetWindow").Call(c.hwnd, 6); popup != 0 && popup != c.hwnd {
+			t.Fatal("unexpected native settings panel")
+		}
+		c.Close()
 	}
 }
-
 func TestLyricSettingsNormalizeFontAndPreserveUnrelatedKeys(t *testing.T) {
 	pixel := normalizeLyricSettings(configs.DesktopLyricsConfig{FontSize: 31})
 	if pixel.FontName != pixelfont.Name || pixel.FontSize != 36 {

@@ -711,8 +711,14 @@ func (p *Player) RenderTicker() model.Ticker {
 }
 
 func (p *Player) updateDesktopLyrics() {
-	dl := p.netease.DesktopLyrics()
+	p.netease.desktopLyricsMu.Lock()
+	defer p.netease.desktopLyricsMu.Unlock()
+	dl := p.netease.desktopLyrics
 	if dl == nil {
+		return
+	}
+	if p.netease.desktopLyricsDisabled {
+		dl.Hide()
 		return
 	}
 

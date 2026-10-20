@@ -166,13 +166,14 @@ func (c *windowsController) renderLyrics(hwnd uintptr) error {
 	active := lyricColor(c.cfg.TextColor, 0xB3C1E5)
 	inactive := ((active & 0xff) * 2 / 3) | (((active >> 8 & 0xff) * 2 / 3) << 8) | (((active >> 16 & 0xff) * 2 / 3) << 16)
 	draw := func(text string, rect dlRect, color uintptr) {
+		flags := lyricTextFlags(c.cfg.TextAlign, c.cfg.Vertical)
 		dlGDI.NewProc("SetTextColor").Call(s.dc, lyricColor(c.cfg.ShadowColor, 0x101010))
 		for _, offset := range []dlPoint{{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}} {
 			shadow := dlRect{rect.left + offset.x, rect.top + offset.y, rect.right + offset.x, rect.bottom + offset.y}
-			drawLyricText(s.dc, text, &shadow, dlTextFlags)
+			drawLyricText(s.dc, text, &shadow, flags)
 		}
 		dlGDI.NewProc("SetTextColor").Call(s.dc, color)
-		drawLyricText(s.dc, text, &rect, dlTextFlags)
+		drawLyricText(s.dc, text, &rect, flags)
 	}
 	if c.cfg.Vertical {
 		columnIndex := int32(0)
@@ -213,4 +214,18 @@ func (c *windowsController) renderLyrics(hwnd uintptr) error {
 		return fmt.Errorf("update lyric surface: %w", err)
 	}
 	return nil
+}
+
+func lyricTextFlags(alignment string, vertical bool) uintptr {
+	if vertical {
+		return dlTextFlags
+	}
+	switch alignment {
+	case "left":
+		return dlTextFlags &^ 0x0001
+	case "right":
+		return dlTextFlags&^0x0001 | 0x0002
+	default:
+		return dlTextFlags
+	}
 }

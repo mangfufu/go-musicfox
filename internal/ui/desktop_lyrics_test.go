@@ -3,6 +3,9 @@ package ui
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,5 +87,64 @@ func TestDesktopLyricsFollowPlaybackAndClearMissingSong(t *testing.T) {
 	n.player.updateDesktopLyrics()
 	if sink.visible || sink.current.Text != "" || sink.next.Text != "" {
 		t.Fatal("missing song retained stale lyrics")
+	}
+}
+
+func TestDesktopLyricsTogglePersistsAndSurvivesPlaybackUpdates(t *testing.T) {
+	_, n, engine := newCassetteDashboardFixture(t, "top")
+	n.player.netease = n
+	sink := &desktopLyricSink{}
+	n.desktopLyrics = sink
+	n.lyricService = lyric.NewService(&desktopLyricFetcher{}, true, 0, true)
+	if err := n.lyricService.SetSong(context.Background(), structs.Song{Id: 1}); err != nil {
+		t.Fatal(err)
+	}
+	n.lyricService.UpdatePosition(time.Second)
+	engine.state = types.Playing
+	n.player.updateDesktopLyrics()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("# keep\n[main.lyric.desktopLyrics]\nenable = true\nfontSize = 36\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.setDesktopLyricsEnabled(false, path); err != nil {
+		t.Fatal(err)
+	}
+	for _, state := range []types.State{types.Playing, types.Paused, types.Stopped, types.Playing} {
+		engine.state = state
+		n.player.updateDesktopLyrics()
+		if sink.visible {
+			t.Fatalf("disabled lyrics reappeared during %v", state)
+		}
+	}
+	if err := n.lyricService.SetSong(context.Background(), structs.Song{Id: 2}); err != nil {
+		t.Fatal(err)
+	}
+	n.player.updateDesktopLyrics()
+	if sink.visible {
+		t.Fatal("changing tracks restored disabled lyrics")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(data), "enable = false") || !strings.Contains(string(data), "# keep") || !strings.Contains(string(data), "fontSize = 36") {
+		t.Fatalf("toggle did not preserve configuration: %s, %v", data, err)
+	}
+	loaded, err := configs.NewConfigFromTomlFile(path)
+	if err != nil || loaded.Main.Lyric.DesktopLyrics.Enable {
+		t.Fatalf("disabled preference did not survive reload: %v", err)
+	}
+	if err := n.setDesktopLyricsEnabled(true, path); err != nil {
+		t.Fatal(err)
+	}
+	if !sink.visible || n.desktopLyricsDisabled {
+		t.Fatal("enabling lyrics should immediately restore the current line")
+	}
+	loaded, err = configs.NewConfigFromTomlFile(path)
+	if err != nil || !loaded.Main.Lyric.DesktopLyrics.Enable {
+		t.Fatalf("enabled preference did not survive reload: %v", err)
+	}
+	if err := n.setDesktopLyricsEnabled(false, filepath.Join(t.TempDir(), "missing.toml")); err == nil {
+		t.Fatal("missing config must fail to save")
+	}
+	if n.desktopLyricsDisabled || !sink.visible {
+		t.Fatal("save failure changed the running state")
 	}
 }
